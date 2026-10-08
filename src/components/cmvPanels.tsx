@@ -633,13 +633,15 @@ function PeriodFilterBar({
   selectedPeriod,
   onSelect,
   onRemovePeriod,
-  canManagePeriods = false
+  canManagePeriods = false,
+  compactOnly = false
 }: {
   dashboards: PeriodDashboard[];
   selectedPeriod: string;
   onSelect: (value: string) => void;
   onRemovePeriod?: (value: string) => void;
   canManagePeriods?: boolean;
+  compactOnly?: boolean;
 }) {
   const { t } = useLocale();
   if (dashboards.length === 0) {
@@ -647,13 +649,15 @@ function PeriodFilterBar({
   }
 
   return (
-    <section className="card compact-card period-filter-card">
-      <div className="section-head">
-        <div>
-          <h3>{String(t("periodAnalyzed"))}</h3>
-          <p>{String(t("periodAnalyzedText"))}</p>
+    <section className={compactOnly ? "period-selector-strip" : "card compact-card period-filter-card"}>
+      {!compactOnly ? (
+        <div className="section-head">
+          <div>
+            <h3>{String(t("periodAnalyzed"))}</h3>
+            <p>{String(t("periodAnalyzedText"))}</p>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="filter-bar">
         <button type="button" className={`filter-pill ${selectedPeriod === TOTAL_PERIOD ? "active" : ""}`} onClick={() => onSelect(TOTAL_PERIOD)}>
@@ -1043,8 +1047,12 @@ function ProductHighlights({ products }: { products: ProductSummary[] }) {
   const highlightedProducts = mergeProductsForDisplay(validProducts);
 
   const topRevenue = highlightedProducts.slice().sort((a, b) => b.revenue - a.revenue).slice(0, 6);
-  const highestCMV = highlightedProducts
+  const topSoldProducts = highlightedProducts
     .filter((item) => item.revenue > 0 && item.quantity > 0)
+    .slice()
+    .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue)
+    .slice(0, 25);
+  const highestCMV = topSoldProducts
     .slice()
     .sort((a, b) => b.cmvPercent - a.cmvPercent)
     .slice(0, 6);
@@ -1283,6 +1291,7 @@ export function DashboardPanels({
             onSelect={onSelectPeriod}
             onRemovePeriod={onRemovePeriod}
             canManagePeriods={canManageOperationalData}
+            compactOnly={!canManageOperationalData}
           />
           <GroupFilterBar groups={dashboard.groups} selectedView={selectedView} onSelect={onSelectView} />
 

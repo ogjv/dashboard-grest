@@ -117,6 +117,26 @@ const fallbackCard = (processingLabel: string) => (
   </section>
 );
 
+function ActiveRestaurantBadge({ session }: { session: AuthSession }) {
+  const activeRestaurantId = session.activeRestaurantId ?? session.restaurantId;
+  const activeMembership = (session.memberships ?? []).find((membership) => membership.restaurantId === activeRestaurantId);
+  const restaurantName = session.activeRestaurantName ?? activeMembership?.restaurantName ?? session.restaurantName ?? "Restaurante";
+  const photoUrl = session.activeRestaurantPhotoUrl ?? activeMembership?.photoUrl;
+  const initials = restaurantName.slice(0, 2).toUpperCase();
+
+  return (
+    <div className="active-restaurant-badge" aria-label={`Restaurante ativo: ${restaurantName}`}>
+      <span className={`active-restaurant-badge-avatar ${photoUrl ? "has-photo" : ""}`} aria-hidden="true">
+        {photoUrl ? <img src={photoUrl} alt="" /> : initials}
+      </span>
+      <span className="active-restaurant-badge-copy">
+        <small>Restaurante ativo</small>
+        <strong title={restaurantName}>{restaurantName}</strong>
+      </span>
+    </div>
+  );
+}
+
 export function DashboardShell({
   locale,
   theme,
@@ -206,6 +226,10 @@ export function DashboardShell({
             languageLabel={languageLabel}
             themeLabels={themeLabels}
           />
+
+          {currentSection === "dashboard" || currentSection === "dre" || currentSection === "goods-entry" || currentSection === "operational-history" ? (
+            <ActiveRestaurantBadge session={effectiveSession} />
+          ) : null}
 
           {currentSection === "dashboard" || currentSection === "dre" || currentSection === "goods-entry" || currentSection === "operational-history" ? (
             <RestaurantNavigatorPanel

@@ -132,14 +132,18 @@ const getGoodsEntryDedupKey = (row: GoodsEntryRow) =>
     const referenceDate = getGoodsEntryReferenceDate(row);
     const receiptNumber = normalizeGoodsEntryDedupText(row.receiptNumber);
     const totalValue = Number(row.totalValue || 0).toFixed(2);
+    const quantity = Number(row.quantity || 0).toFixed(4);
+    const purchaseUnitPrice = Number(row.purchaseUnitPrice || 0).toFixed(4);
+    const unitPrice = Number(row.unitPrice || 0).toFixed(4);
 
     if (referenceDate && receiptNumber) {
       return [
         referenceDate,
         receiptNumber,
         totalValue,
-        normalizeGoodsEntryDedupText(row.productName),
-        normalizeGoodsEntryDedupText(row.supplier)
+        quantity,
+        purchaseUnitPrice,
+        unitPrice
       ].join("|");
     }
 

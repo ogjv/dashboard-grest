@@ -125,12 +125,6 @@ const buildContinuousRange = (startDate?: string, endDate?: string) => {
   return dates;
 };
 
-const formatMonthLabel = (month: CalendarMonth) =>
-  new Intl.DateTimeFormat("pt-BR", {
-    month: "long",
-    year: "numeric"
-  }).format(new Date(month.year, month.month - 1, 1));
-
 const buildMonthCells = (month: CalendarMonth) => {
   const firstDay = new Date(month.year, month.month - 1, 1);
   const daysInMonth = new Date(month.year, month.month, 0).getDate();
@@ -199,7 +193,9 @@ function GoodsEntryDateField({
   open,
   onToggle,
   availableMonths,
-  availableDateSet
+  availableDateSet,
+  minDate,
+  maxDate
 }: {
   label: string;
   value: string;
@@ -208,6 +204,8 @@ function GoodsEntryDateField({
   onToggle: () => void;
   availableMonths: CalendarMonth[];
   availableDateSet: Set<string>;
+  minDate?: string;
+  maxDate?: string;
 }) {
   const [visibleMonthKey, setVisibleMonthKey] = useState(() =>
     getMonthKey(value ? parseMonthKey(value.slice(0, 7)) : availableMonths[0] ?? { year: new Date().getFullYear(), month: new Date().getMonth() + 1 })
@@ -232,6 +230,18 @@ function GoodsEntryDateField({
   const monthCells = activeMonth ? buildMonthCells(activeMonth) : [];
   const canGoBack = activeIndex > 0;
   const canGoForward = activeIndex >= 0 && activeIndex < availableMonths.length - 1;
+  const availableYears = [...new Set(availableMonths.map((month) => month.year))].sort((left, right) => left - right);
+  const monthsInActiveYear = activeMonth
+    ? availableMonths.filter((month) => month.year === activeMonth.year)
+    : availableMonths;
+  const handleYearChange = (year: number) => {
+    const nextMonth =
+      availableMonths.find((month) => month.year === year && month.month === activeMonth?.month) ??
+      availableMonths.find((month) => month.year === year);
+    if (nextMonth) {
+      setVisibleMonthKey(getMonthKey(nextMonth));
+    }
+  };
 
   return (
     <label className={`auth-field goods-entry-filter-field goods-entry-date-field ${open ? "open" : ""}`}>
@@ -246,7 +256,27 @@ function GoodsEntryDateField({
             <button type="button" className="goods-entry-calendar-nav" onClick={() => canGoBack && setVisibleMonthKey(getMonthKey(availableMonths[activeIndex - 1]))} disabled={!canGoBack}>
               {"<"}
             </button>
-            <strong>{formatMonthLabel(activeMonth)}</strong>
+            <div className="goods-entry-calendar-selectors">
+              <select
+                className="goods-entry-calendar-month-select"
+                aria-label="Selecionar mês"
+                value={activeMonth.month}
+                onChange={(event) => setVisibleMonthKey(getMonthKey({ year: activeMonth.year, month: Number(event.target.value) }))}
+              >
+                {monthsInActiveYear.map((month) => (
+                  <option key={getMonthKey(month)} value={month.month}>
+                    {new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(month.year, month.month - 1, 1))}
+                  </option>
+                ))}
+              </select>
+              <select className="goods-entry-calendar-year-select" aria-label="Selecionar ano" value={activeMonth.year} onChange={(event) => handleYearChange(Number(event.target.value))}>
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
               type="button"
               className="goods-entry-calendar-nav"
@@ -268,7 +298,7 @@ function GoodsEntryDateField({
               }
 
               const safeDate = cell.date;
-              const selectable = availableDateSet.has(safeDate);
+              const selectable = availableDateSet.has(safeDate) && (!minDate || safeDate >= minDate) && (!maxDate || safeDate <= maxDate);
               return (
                 <button
                   key={safeDate}
@@ -843,7 +873,7 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [selectedGroup, setSelectedGroup] = useState("__ALL__");
-  const [selectedSupplier, setSelectedSupplier] = useState("__ALL__");
+  const [selectedSubgroup, setSelectedSubgroup] = useState("__ALL__");
   const [focusedGroup, setFocusedGroup] = useState<string>();
   const [openCalendar, setOpenCalendar] = useState<CalendarField | null>(null);
 
@@ -865,52 +895,59 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
     () => [...new Set(sourceEntries.map((row) => row.group).filter(Boolean))].sort((left, right) => left.localeCompare(right)),
     [sourceEntries]
   );
-  const suppliers = useMemo(
-    () => [...new Set(sourceEntries.map((row) => row.supplier).filter(Boolean))].sort((left, right) => left.localeCompare(right)),
-    [sourceEntries]
+  const subgroupSourceEntries = useMemo(
+    () => sourceEntries.filter((row) => selectedGroup === "__ALL__" || row.group === selectedGroup),
+    [selectedGroup, sourceEntries]
+  );
+  const subgroups = useMemo(
+    () => [...new Set(subgroupSourceEntries.map((row) => row.subgroup).filter(Boolean))].sort((left, right) => left.localeCompare(right)),
+    [subgroupSourceEntries]
   );
   const groupOptions = useMemo(
     () => [{ value: "__ALL__", label: "Todos os grupos" }, ...groups.map((group) => ({ value: group, label: group }))],
     [groups]
   );
-  const supplierOptions = useMemo(
-    () => [{ value: "__ALL__", label: "Todos os fornecedores" }, ...suppliers.map((supplier) => ({ value: supplier, label: supplier }))],
-    [suppliers]
+  const subgroupOptions = useMemo(
+    () => [{ value: "__ALL__", label: selectedGroup === "__ALL__" ? "Todos os subgrupos" : `Todos em ${selectedGroup}` }, ...subgroups.map((subgroup) => ({ value: subgroup, label: subgroup }))],
+    [selectedGroup, subgroups]
   );
 
   useEffect(() => {
     setDateFrom("");
     setDateTo("");
     setSelectedGroup("__ALL__");
-    setSelectedSupplier("__ALL__");
+    setSelectedSubgroup("__ALL__");
     setFocusedGroup(undefined);
     setOpenCalendar(null);
   }, [dataVersion]);
 
-  const normalizedDateFrom = dateFrom && dateTo && dateFrom > dateTo ? dateTo : dateFrom;
-  const normalizedDateTo = dateFrom && dateTo && dateFrom > dateTo ? dateFrom : dateTo;
+  useEffect(() => {
+    if (selectedSubgroup !== "__ALL__" && !subgroups.includes(selectedSubgroup)) {
+      setSelectedSubgroup("__ALL__");
+    }
+  }, [selectedSubgroup, subgroups]);
 
   const filteredEntries = useMemo(
     () =>
       sourceEntries.filter((row) => {
         const referenceDate = getReferenceDate(row);
         if (hasEntryLevelDates) {
-          if (normalizedDateFrom && (!referenceDate || referenceDate < normalizedDateFrom)) {
+          if (dateFrom && (!referenceDate || referenceDate < dateFrom)) {
             return false;
           }
-          if (normalizedDateTo && (!referenceDate || referenceDate > normalizedDateTo)) {
+          if (dateTo && (!referenceDate || referenceDate > dateTo)) {
             return false;
           }
         }
         if (selectedGroup !== "__ALL__" && row.group !== selectedGroup) {
           return false;
         }
-        if (selectedSupplier !== "__ALL__" && row.supplier !== selectedSupplier) {
+        if (selectedSubgroup !== "__ALL__" && row.subgroup !== selectedSubgroup) {
           return false;
         }
         return true;
       }),
-    [hasEntryLevelDates, normalizedDateFrom, normalizedDateTo, selectedGroup, selectedSupplier, sourceEntries]
+    [dateFrom, dateTo, hasEntryLevelDates, selectedGroup, selectedSubgroup, sourceEntries]
   );
 
   const availableDateSet = useMemo(() => new Set(availableDates), [availableDates]);
@@ -979,6 +1016,7 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
         </section>
       ) : (
         <>
+          {canManageData ? (
           <section className="card compact-card period-filter-card goods-entry-period-card">
             <div className="section-head">
               <div>
@@ -1003,8 +1041,7 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
                         <button type="button" className="filter-pill-main">
                           {label}
                         </button>
-                        {canManageData ? (
-                          <button
+                        <button
                             type="button"
                             className="filter-pill-remove"
                             onClick={() => handleRemoveImportedPeriod(label)}
@@ -1013,7 +1050,6 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
                           >
                             <IconTrash />
                           </button>
-                        ) : null}
                       </span>
                     ))}
                   </div>
@@ -1021,12 +1057,13 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
               ) : null}
             </div>
           </section>
+          ) : null}
 
           <section className="card goods-entry-filter-card">
             <div className="section-head">
               <div>
                 <h3>Filtro</h3>
-                <p>Refine a leitura por período, grupo e fornecedor com um recorte visual mais limpo e interativo.</p>
+                <p>Refine a leitura por período, grupo e subgrupo com um recorte visual mais limpo e interativo.</p>
               </div>
               <div className="goods-entry-filter-summary">
                 <span className="cmv-pill good">{periodLabel}</span>
@@ -1040,17 +1077,24 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
                 value={dateFrom}
                 onChange={(value) => {
                   setDateFrom(value);
+                  if (dateTo && value > dateTo) {
+                    setDateTo("");
+                  }
                   setOpenCalendar(null);
                 }}
                 open={openCalendar === "from"}
                 onToggle={() => setOpenCalendar((current) => (current === "from" ? null : "from"))}
                 availableMonths={availableMonths}
                 availableDateSet={availableDateSet}
+                maxDate={dateTo || undefined}
               />
               <GoodsEntryDateField
                 label="Data final"
                 value={dateTo}
                 onChange={(value) => {
+                  if (dateFrom && value < dateFrom) {
+                    return;
+                  }
                   setDateTo(value);
                   setOpenCalendar(null);
                 }}
@@ -1058,9 +1102,19 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
                 onToggle={() => setOpenCalendar((current) => (current === "to" ? null : "to"))}
                 availableMonths={availableMonths}
                 availableDateSet={availableDateSet}
+                minDate={dateFrom || undefined}
               />
-              <FilterSelect label="Grupo" value={selectedGroup} options={groupOptions} onChange={setSelectedGroup} />
-              <FilterSelect label="Fornecedor" value={selectedSupplier} options={supplierOptions} onChange={setSelectedSupplier} />
+              <FilterSelect
+                label="Grupo"
+                value={selectedGroup}
+                options={groupOptions}
+                onChange={(value) => {
+                  setSelectedGroup(value);
+                  setSelectedSubgroup("__ALL__");
+                  setFocusedGroup(undefined);
+                }}
+              />
+              <FilterSelect label="Subgrupo" value={selectedSubgroup} options={subgroupOptions} onChange={setSelectedSubgroup} />
             </div>
 
             <div className="goods-entry-filter-actions">
@@ -1071,7 +1125,7 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
                   setDateFrom("");
                   setDateTo("");
                   setSelectedGroup("__ALL__");
-                  setSelectedSupplier("__ALL__");
+                  setSelectedSubgroup("__ALL__");
                   setFocusedGroup(undefined);
                   setOpenCalendar(null);
                 }}
@@ -1080,7 +1134,7 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
               </button>
               <div className="goods-entry-filter-chips">
                 {selectedGroup !== "__ALL__" ? <span className="cmv-pill mid">{selectedGroup}</span> : null}
-                {selectedSupplier !== "__ALL__" ? <span className="cmv-pill promo">{selectedSupplier}</span> : null}
+                {selectedSubgroup !== "__ALL__" ? <span className="cmv-pill promo">{selectedSubgroup}</span> : null}
               </div>
             </div>
           </section>
@@ -1090,7 +1144,7 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
               <div className="empty-state-inner">
                 <EmptyStateIcon />
                 <h3>Nenhum lançamento no recorte</h3>
-                <p>Ajuste as datas, grupo ou fornecedor para ampliar a leitura das entradas de mercadorias.</p>
+                <p>Ajuste as datas, grupo ou subgrupo para ampliar a leitura das entradas de mercadorias.</p>
               </div>
             </section>
           ) : (
