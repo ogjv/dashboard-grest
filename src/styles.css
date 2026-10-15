@@ -10831,3 +10831,92 @@ th {
   .workspace-context-user-copy strong { font-size: 0.72rem; }
   .workspace-context-user .profile-avatar { width: 28px; height: 28px; }
 }
+
+/* Participation charts share a predictable header and a full-width legend.
+   Dense categories grow vertically, without fixed-width columns or clipping. */
+.dre-participation-panel .dre-donut-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--dre-donut-min-width, 320px)), 1fr));
+  grid-auto-flow: row;
+  gap: 14px;
+}
+.dre-participation-panel .dre-donut-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  grid-column: auto;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  overflow: visible;
+  container: dre-donut / inline-size;
+}
+.dre-participation-panel .dre-donut-card.very-dense { grid-column: 1 / -1; }
+.dre-participation-panel .dre-donut-heading {
+  display: grid;
+  grid-template-columns: minmax(88px, 128px) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.dre-participation-panel .dre-donut-card .dre-donut-shell,
+.dre-participation-panel .dre-donut-card .dre-donut-copy {
+  min-width: 0;
+  justify-self: stretch;
+  text-align: left;
+}
+.dre-participation-panel .dre-donut-card .dre-mini-donut { width: 100%; height: auto; max-width: 128px; }
+.dre-participation-panel .dre-donut-copy { gap: 6px; align-content: center; justify-items: start; }
+.dre-participation-panel .dre-donut-copy h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.dre-participation-panel .dre-donut-copy p { font-size: 0.85rem; overflow-wrap: anywhere; }
+.dre-participation-panel .dre-donut-card .dre-donut-legend {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-column: auto;
+  gap: 0;
+  align-content: start;
+  align-self: stretch;
+  justify-self: stretch;
+  max-height: none;
+  min-width: 0;
+  padding: 0;
+  overflow: visible;
+  border-top: 1px solid var(--line);
+}
+.dre-participation-panel .dre-donut-card .dre-donut-legend-row {
+  grid-template-columns: 10px minmax(0, 1fr) max-content;
+  align-items: start;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  font-size: 0.8rem;
+  transform: none;
+}
+.dre-participation-panel .dre-donut-card .dre-donut-legend-row:last-child { border-bottom: 0; }
+.dre-participation-panel .dre-donut-card .dre-donut-legend-row:is(:hover, .active) { background: var(--menu-hover); }
+.dre-participation-panel .dre-donut-card .dre-donut-legend-name {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+.dre-participation-panel .dre-donut-card .dre-donut-legend-row strong {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dre-participation-panel .dre-donut-swatch { margin-top: 4px; }
+@container dre-donut (min-width: 560px) {
+  .dre-participation-panel .dre-donut-card .dre-donut-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+}

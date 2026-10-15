@@ -10,6 +10,7 @@ import { PeriodSelector } from "./periodSelector";
 import { RestaurantNavigatorPanel } from "./dashboardPanels";
 import { useViewState } from "../hooks/useViewState";
 import { ChartDetails } from "./chartDetails";
+import { getDreTaxValue } from "../utils/dreTaxes";
 import { activateChartMark, useChartDetails } from "../hooks/useChartDetails";
 
 const drePalette = ["#2f6f5e", "#c9823a", "#496f9f", "#8b6f47", "#6f7785", "#a55c7a", "#5f7f4f", "#6a5acd", "#4f8a8b", "#b08d57"];
@@ -207,7 +208,6 @@ const DRE_OCCUPANCY_TERMS = [
   "CONCESSIONARIAS",
   "CONDOMINIO"
 ];
-const DRE_TAX_TERMS = ["IMPOSTOS", "IMPOSTO", "TRIBUTOS", "TRIBUTO"];
 
 const formatCompactCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", {
@@ -355,7 +355,6 @@ const getDreGroupsValueByTerms = (data: DreImportData, terms: string[]) => {
   return [...uniqueGroups.values()].reduce((sum, item) => sum + getDreGroupValue(item.group), 0);
 };
 
-const getDreTaxValue = (data: DreImportData) => getDreGroupsValueByTerms(data, DRE_TAX_TERMS);
 
 const getDreMaterialValue = (data: DreImportData) => getDreGroupsValueByTerms(data, DRE_MATERIAL_TERMS);
 
@@ -840,16 +839,16 @@ function DreMiniDonut({
   const { details: tooltip, setDetails: setTooltip, chartRef, anchor, onMouseLeave } = useChartDetails<{ label: string; value: number; x: number; y: number }>();
   const isDense = items.length > 6;
   const isVeryDense = items.length > 10;
-  const size = isVeryDense ? 300 : isDense ? 244 : 176;
+  const size = 176;
   const cx = size / 2;
   const cy = size / 2;
-  const outerRadius = isVeryDense ? 142 : isDense ? 114 : 80;
-  const innerRadius = isVeryDense ? 78 : isDense ? 66 : 46;
+  const outerRadius = 80;
+  const innerRadius = 46;
   const activeItem = items.find((item) => item.label === selectedSlice);
   const centerValue = activeItem ? activeItem.value : total;
   const centerLabel = activeItem ? formatDonutCenterLabel(activeItem.label) : copy.total;
   const centerBoxSize = Math.max(58, (innerRadius - 9) * 2);
-  const centerBoxHeight = isVeryDense ? 62 : isDense ? 54 : 46;
+  const centerBoxHeight = 46;
   let cursor = 0;
   const showTooltip = (item: { label: string; value: number }, event: { clientX: number; clientY: number }) => {
     setTooltip({
@@ -862,6 +861,7 @@ function DreMiniDonut({
 
   return (
     <article ref={chartRef} onMouseLeave={onMouseLeave} className={`dre-donut-card ${isDense ? "dense" : ""} ${isVeryDense ? "very-dense" : ""}`}>
+      <div className="dre-donut-heading">
       <div className="dre-donut-shell">
         <svg viewBox={`0 0 ${size} ${size}`} className="dre-mini-donut" role="group" aria-label={title}>
           {items.map((item) => {
@@ -914,8 +914,9 @@ function DreMiniDonut({
       </div>
       <div className="dre-donut-copy">
         <span className="eyebrow">#{index + 1}</span>
-        <strong>{title}</strong>
+        <h4>{title}</h4>
         <p>{formatCurrency(total)}</p>
+      </div>
       </div>
       <div className="dre-donut-legend">
         {items.map((item) => (
@@ -948,7 +949,7 @@ function DreMiniDonut({
   );
 }
 
-function DreParticipationGrid({ data, copy }: { data: DreImportData; copy: DrePanelCopy }) {
+export function DreParticipationGrid({ data, copy }: { data: DreImportData; copy: DrePanelCopy }) {
   const sectionCharts = data.sections
     .map((section, sectionIndex) => {
       const items = section.groups
@@ -980,7 +981,7 @@ function DreParticipationGrid({ data, copy }: { data: DreImportData; copy: DrePa
           <p>{copy.dreParticipationText}</p>
         </div>
       </div>
-      <div className={`dre-donut-grid ${sectionCharts.length % 2 === 1 ? "odd" : ""}`}>
+      <div className="dre-donut-grid" style={{ "--dre-donut-min-width": sectionCharts.some(section => section.title.length > 24 || section.items.length > 6 || section.items.some(item => item.label.length > 28)) ? "360px" : "300px" } as CSSProperties}>
         {sectionCharts.map((section, index) => (
           <DreMiniDonut
             key={section.title}
