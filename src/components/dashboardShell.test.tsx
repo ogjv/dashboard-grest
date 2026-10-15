@@ -195,7 +195,9 @@ describe("DashboardShell", () => {
 
     const dreButton = container.querySelector('button[aria-label="Dashboard"]') as HTMLButtonElement;
     const logoutButton = container.querySelector(`button[aria-label="${translations.pt.authLogout}"]`) as HTMLButtonElement;
-    const accountButton = container.querySelector(`button[aria-label="${translations.pt.navMyAccount}"]`) as HTMLButtonElement;
+    const accountButton = container.querySelector('.workspace-context-user') as HTMLButtonElement;
+    expect(container.querySelectorAll('.sidebar-account-menu button')).toHaveLength(2);
+    expect(container.querySelector('.sidebar-account-menu .profile-avatar')).toBeNull();
 
     act(() => {
       dreButton.click();

@@ -6,6 +6,11 @@ import { formatCurrency, formatPercent } from "../utils/cmv";
 import { loadRestaurantWorkspace } from "../utils/auth";
 import { loadCloudWorkspace } from "../utils/cloudAuth";
 import { getNavigationIcon } from "./appChrome";
+import { PeriodSelector } from "./periodSelector";
+import { RestaurantNavigatorPanel } from "./dashboardPanels";
+import { useViewState } from "../hooks/useViewState";
+import { ChartDetails } from "./chartDetails";
+import { activateChartMark, useChartDetails } from "../hooks/useChartDetails";
 
 const drePalette = ["#2f6f5e", "#c9823a", "#496f9f", "#8b6f47", "#6f7785", "#a55c7a", "#5f7f4f", "#6a5acd", "#4f8a8b", "#b08d57"];
 const shortMonthLabels = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -108,17 +113,6 @@ const buildArcPath = (
   ].join(" ");
 };
 
-function IconTrash() {
-  return (
-    <svg className="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 7h16" />
-      <path d="M10 11v6" />
-      <path d="M14 11v6" />
-      <path d="M6 7l1 14h10l1-14" />
-      <path d="M9 7V4h6v3" />
-    </svg>
-  );
-}
 
 const normalizeDreLabel = (value: string) =>
   value
@@ -843,7 +837,7 @@ function DreMiniDonut({
 }) {
   const [clickedSlice, setClickedSlice] = useState<string>();
   const [selectedSlice, setSelectedSlice] = useState<string>();
-  const [tooltip, setTooltip] = useState<{ label: string; value: number; x: number; y: number }>();
+  const { details: tooltip, setDetails: setTooltip, chartRef, anchor, onMouseLeave } = useChartDetails<{ label: string; value: number; x: number; y: number }>();
   const isDense = items.length > 6;
   const isVeryDense = items.length > 10;
   const size = isVeryDense ? 300 : isDense ? 244 : 176;
@@ -867,9 +861,9 @@ function DreMiniDonut({
   };
 
   return (
-    <article className={`dre-donut-card ${isDense ? "dense" : ""} ${isVeryDense ? "very-dense" : ""}`}>
+    <article ref={chartRef} onMouseLeave={onMouseLeave} className={`dre-donut-card ${isDense ? "dense" : ""} ${isVeryDense ? "very-dense" : ""}`}>
       <div className="dre-donut-shell">
-        <svg viewBox={`0 0 ${size} ${size}`} className="dre-mini-donut" role="img" aria-label={title}>
+        <svg viewBox={`0 0 ${size} ${size}`} className="dre-mini-donut" role="group" aria-label={title}>
           {items.map((item) => {
             const share = total > 0 ? item.value / total : 0;
             const start = cursor * 360;
@@ -881,9 +875,14 @@ function DreMiniDonut({
                 key={item.label}
                 d={buildArcPath(cx, cy, outerRadius, innerRadius, start, end)}
                 fill={item.color}
+                tabIndex={0}
+                role="button"
+                aria-label={`${item.label}: ${formatCurrency(item.value)}`}
+                onKeyDown={activateChartMark}
                 className={`${clickedSlice === item.label ? "clicked" : ""} ${selectedSlice === item.label ? "active" : ""}`}
                 onClick={() => {
                   setSelectedSlice((current) => (current === item.label ? undefined : item.label));
+                  showTooltip(item, { clientX: 0, clientY: 0 });
                   setClickedSlice(item.label);
                   window.setTimeout(() => {
                     setClickedSlice((current) => (current === item.label ? undefined : current));
@@ -891,7 +890,8 @@ function DreMiniDonut({
                 }}
                 onMouseEnter={(event) => showTooltip(item, event)}
                 onMouseMove={(event) => showTooltip(item, event)}
-                onMouseLeave={() => setTooltip(undefined)}
+                onFocus={() => showTooltip(item, { clientX: 0, clientY: 0 })}
+                onMouseLeave={onMouseLeave}
               >
                 <title>{`${item.label}: ${formatCurrency(item.value)}`}</title>
               </path>
@@ -923,10 +923,13 @@ function DreMiniDonut({
             key={item.label}
             type="button"
             className={`dre-donut-legend-row ${selectedSlice === item.label ? "active" : ""}`}
-            onClick={() => setSelectedSlice((current) => (current === item.label ? undefined : item.label))}
+            onClick={() => {
+              setSelectedSlice((current) => (current === item.label ? undefined : item.label));
+              showTooltip(item, { clientX: 0, clientY: 0 });
+            }}
             onMouseEnter={(event) => showTooltip(item, event)}
             onMouseMove={(event) => showTooltip(item, event)}
-            onMouseLeave={() => setTooltip(undefined)}
+            onMouseLeave={onMouseLeave}
           >
             <span className="dre-donut-swatch" style={{ backgroundColor: item.color }} />
             <span className="dre-donut-legend-name">{item.label}</span>
@@ -935,11 +938,11 @@ function DreMiniDonut({
         ))}
       </div>
       {tooltip ? (
-        <div className="dre-donut-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
+        <ChartDetails anchor={anchor}>
           <strong>{tooltip.label}</strong>
           <span>{formatCurrency(tooltip.value)}</span>
           <span>{formatPercent(total > 0 ? (tooltip.value / total) * 100 : 0)} de participação</span>
-        </div>
+        </ChartDetails>
       ) : null}
     </article>
   );
@@ -1658,43 +1661,23 @@ function DreComparisonSelector({
         {loading && enabled ? <span className="soft-badge">Carregando dados</span> : null}
       </div>
       <div className="dre-view-mode-switch" role="group" aria-label="Modo de visualização da DRE">
-        <button type="button" className={!enabled ? "active" : ""} onClick={() => onModeChange(false)}>
+        <button type="button" className={!enabled ? "active" : ""} aria-pressed={!enabled} onClick={() => onModeChange(false)}>
           Única
         </button>
-        <button type="button" className={enabled ? "active" : ""} onClick={() => onModeChange(true)}>
+        <button type="button" className={enabled ? "active" : ""} aria-pressed={enabled} onClick={() => onModeChange(true)}>
           Comparativa
         </button>
       </div>
       {enabled ? (
-        <>
-          <p className="dre-view-mode-hint">Escolha as unidades que deseja comparar no mesmo recorte de período.</p>
-          <div className="dre-comparison-restaurant-grid">
-        {restaurants.map((restaurant) => {
-          const selected = selectedIds.includes(restaurant.restaurantId);
-          const initials = restaurant.restaurantName
-            .split(/\s+/)
-            .map((part) => part[0])
-            .join("")
-            .slice(0, 2)
-            .toUpperCase();
-
-          return (
-            <button
-              key={restaurant.restaurantId}
-              type="button"
-              className={`dre-comparison-restaurant-pill ${selected ? "active" : ""}`}
-              onClick={() => onToggle(restaurant.restaurantId)}
-            >
-              <span className="dre-comparison-avatar">
-                {restaurant.photoUrl ? <img src={restaurant.photoUrl} alt="" /> : initials}
-              </span>
-              <span>{restaurant.restaurantName}</span>
-              {restaurant.restaurantId === activeRestaurantId ? <small>Atual</small> : null}
-            </button>
-          );
-        })}
-          </div>
-        </>
+        <RestaurantNavigatorPanel
+          eyebrow=""
+          title="Restaurantes da comparação"
+          memberships={restaurants.map((restaurant) => ({ ...restaurant, membershipId: restaurant.restaurantId }))}
+          activeRestaurantId={activeRestaurantId}
+          multiple
+          selectedRestaurantIds={selectedIds}
+          onActivateRestaurant={onToggle}
+        />
       ) : null}
     </div>
   );
@@ -1842,7 +1825,7 @@ function DreComparisonZeroBarChart({
   onSelectMetric?: (key: string) => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [hoveredIndex, setHoveredIndex] = useState<number | undefined>();
+  const { details: hoveredIndex, setDetails: setHoveredIndex, chartRef, anchor, onMouseLeave } = useChartDetails<number>();
   const restaurantCount = Math.max(rows.length, 1);
   const width = Math.max(760, 170 + restaurantCount * 112);
   const height = 380;
@@ -1942,7 +1925,7 @@ function DreComparisonZeroBarChart({
   const hoveredDelta = hoveredValue - averageValue;
 
   return (
-    <section className="dre-chart-card dre-comparison-chart-card dre-future-chart-card" onMouseLeave={() => setHoveredIndex(undefined)}>
+    <section ref={chartRef} className="dre-chart-card dre-comparison-chart-card dre-future-chart-card" onMouseLeave={onMouseLeave}>
       <div className="section-head">
         <div>
           <h3>{title}</h3>
@@ -1973,7 +1956,7 @@ function DreComparisonZeroBarChart({
       ) : null}
       <p className="dre-chart-interaction-hint">Passe o cursor ou toque em uma barra para ver o detalhamento.</p>
       <div className="dre-zero-bar-shell">
-        <svg viewBox={`0 0 ${width} ${height}`} className="dre-zero-bar-chart" role="img" aria-label={title} style={{ minWidth: width }}>
+        <svg viewBox={`0 0 ${width} ${height}`} className="dre-zero-bar-chart" role="group" aria-label={title} style={{ minWidth: width }}>
           <defs>
             <clipPath id={`${chartIdBase}-clip`}>
               <rect x={paddingLeft} y={paddingTop} width={innerWidth} height={innerHeight} />
@@ -2044,7 +2027,12 @@ function DreComparisonZeroBarChart({
             const restaurantColor = drePalette[index % drePalette.length];
 
             return (
-              <g key={row.restaurantId} className={`${index === activeIndex ? "active" : ""} ${isZeroValue ? "is-zero" : ""}`}>
+              <g key={row.restaurantId} className={`${index === activeIndex ? "active" : ""} ${isZeroValue ? "is-zero" : ""}`}
+                role="button" tabIndex={0} aria-label={`${row.restaurantName}: ${formatFullValue(value)}`}
+                onKeyDown={activateChartMark}
+                onClick={() => { setActiveIndex(index); setHoveredIndex(index); }}
+                onFocus={() => { setActiveIndex(index); setHoveredIndex(index); }}>
+                <rect x={x - Math.max(24, barWidth) / 2} y={Math.min(barY, zeroY - 12)} width={Math.max(24, barWidth)} height={Math.max(24, displayBarHeight + 12)} fill="transparent" />
                 <line x1={x} x2={x} y1={zeroY} y2={value >= 0 ? barY : barBottom} className="dre-zero-bar-guide" />
                 {isZeroValue ? (
                   <circle
@@ -2138,13 +2126,13 @@ function DreComparisonZeroBarChart({
         </div>
       ) : null}
       {hoveredRow ? (
-        <div className="dre-benchmark-insight dre-zero-hover-insight" style={{ "--dre-color": drePalette[(hoveredIndex ?? 0) % drePalette.length] } as CSSProperties}>
+        <ChartDetails anchor={anchor}>
           <span>{hoveredRow.restaurantName}</span>
           <strong>{formatFullValue(hoveredValue)}</strong>
           <small>Ranking #{hoveredRank}</small>
           <small>{formatPercent(hoveredShare)} do total comparado</small>
           <small>{hoveredDelta >= 0 ? "+" : ""}{formatFullValue(hoveredDelta)} vs. média</small>
-        </div>
+        </ChartDetails>
       ) : null}
       {activeRow ? (
         <div className="dre-benchmark-insight" style={{ "--dre-color": drePalette[activeIndex % drePalette.length] } as CSSProperties}>
@@ -2235,7 +2223,7 @@ function DreComparisonGroupedRatioChart({ rows }: { rows: DreComparisonRow[] }) 
 }
 
 function DreComparisonGroupedPressureChart({ rows }: { rows: DreComparisonRow[] }) {
-  const [active, setActive] = useState<{
+  const { details: active, setDetails: setActive, chartRef, anchor, onMouseLeave } = useChartDetails<{
     restaurantName: string;
     metricLabel: string;
     ratio: number;
@@ -2272,7 +2260,7 @@ function DreComparisonGroupedPressureChart({ rows }: { rows: DreComparisonRow[] 
   const axisValues = [scaleMax, scaleMax * 0.75, scaleMax * 0.5, scaleMax * 0.25, 0];
 
   return (
-    <section className="dre-chart-card dre-comparison-chart-card dre-comparison-grouped-card dre-grouped-reference-card" onMouseLeave={() => setActive(undefined)}>
+    <section ref={chartRef} className="dre-chart-card dre-comparison-chart-card dre-comparison-grouped-card dre-grouped-reference-card" onMouseLeave={onMouseLeave}>
       <div className="section-head">
         <div>
           <h3>Pressões sobre receita</h3>
@@ -2280,7 +2268,7 @@ function DreComparisonGroupedPressureChart({ rows }: { rows: DreComparisonRow[] 
         </div>
       </div>
       <div className="dre-grouped-chart-shell">
-        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="dre-grouped-ratio-chart" role="img" aria-label="Pressões sobre receita" style={{ minWidth: chartWidth }}>
+        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="dre-grouped-ratio-chart" role="group" aria-label="Pressões sobre receita" style={{ minWidth: chartWidth }}>
           <line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={paddingTop + innerHeight} className="dre-line-y-axis" />
           <text x={paddingLeft - 118} y={paddingTop + innerHeight / 2} textAnchor="middle" className="dre-line-measure-label dre-grouped-measure-label" transform={`rotate(-90 ${paddingLeft - 118} ${paddingTop + innerHeight / 2})`}>
             % da receita
@@ -2313,7 +2301,12 @@ function DreComparisonGroupedPressureChart({ rows }: { rows: DreComparisonRow[] 
                   const labelFits = barHeight >= 48 && barWidth >= 15;
 
                   return (
-                    <g key={`${metric.key}-${row.restaurantId}`}>
+                    <g key={`${metric.key}-${row.restaurantId}`} role="button" tabIndex={0}
+                      aria-label={`${row.restaurantName}, ${metric.label}: ${formatPercent(ratio)}, ${formatCurrency(value)}`}
+                      onKeyDown={activateChartMark}
+                      onFocus={() => setActive({ restaurantName: row.restaurantName, metricLabel: metric.label, ratio, value, color })}
+                      onClick={() => setActive({ restaurantName: row.restaurantName, metricLabel: metric.label, ratio, value, color })}>
+                      <rect x={x} y={Math.min(y, paddingTop + innerHeight - 24)} width={barWidth} height={Math.max(24, barHeight)} fill="transparent" />
                       <path
                         d={`M ${x} ${paddingTop + innerHeight} L ${x} ${y + radius} Q ${x} ${y} ${x + radius} ${y} L ${x + barWidth - radius} ${y} Q ${x + barWidth} ${y} ${x + barWidth} ${y + radius} L ${x + barWidth} ${paddingTop + innerHeight} Z`}
                         fill={color}
@@ -2378,21 +2371,14 @@ function DreComparisonGroupedPressureChart({ rows }: { rows: DreComparisonRow[] 
           })}
         </svg>
       </div>
-      <div
-        className={`dre-benchmark-insight dre-grouped-active-insight ${active ? "visible" : "empty"}`}
-        style={{ "--dre-color": active?.color ?? "rgba(255, 255, 255, 0.28)" } as CSSProperties}
-      >
-        {active ? (
-          <>
-            <span>{active.restaurantName}</span>
-            <strong>{active.metricLabel}</strong>
-            <small>{formatPercent(active.ratio)} da receita</small>
-            <small>{formatCurrency(active.value)}</small>
-          </>
-        ) : (
-          <span>Passe o cursor sobre uma barra para ver restaurante, indicador, percentual e valor.</span>
-        )}
-      </div>
+      {active ? (
+        <ChartDetails anchor={anchor}>
+          <span>{active.restaurantName}</span>
+          <strong>{active.metricLabel}</strong>
+          <small>{formatPercent(active.ratio)} da receita</small>
+          <small>{formatCurrency(active.value)}</small>
+        </ChartDetails>
+      ) : null}
       <div className="dre-chart-centered-legend">
         {rows.map((row, index) => (
           <span key={row.restaurantId}>
@@ -2406,7 +2392,7 @@ function DreComparisonGroupedPressureChart({ rows }: { rows: DreComparisonRow[] 
 }
 
 function DreComparisonEvolutionChart({ rows }: { rows: DreComparisonRow[] }) {
-  const [tooltip, setTooltip] = useState<{
+  const { details: tooltip, setDetails: setTooltip, chartRef, anchor, onMouseLeave } = useChartDetails<{
     x: number;
     y: number;
     restaurantName: string;
@@ -2486,14 +2472,14 @@ function DreComparisonEvolutionChart({ rows }: { rows: DreComparisonRow[] }) {
   }));
 
   return (
-    <section className="dre-chart-card dre-comparison-chart-card dre-comparison-evolution-card dre-line-reference-card">
+    <section ref={chartRef} className="dre-chart-card dre-comparison-chart-card dre-comparison-evolution-card dre-line-reference-card" onMouseLeave={onMouseLeave}>
       <div className="section-head">
         <div>
           <h3>Evolução da margem operacional</h3>
           <p>Compara a tendência mensal dos restaurantes selecionados. Passe o cursor sobre os pontos para ver os valores.</p>
         </div>
       </div>
-      <div className="dre-comparison-evolution-shell" onMouseLeave={() => setTooltip(undefined)}>
+      <div className="dre-comparison-evolution-shell">
         <div className="dre-evolution-zone-legend" aria-label="Classificações da margem operacional">
           {zoneLabels.map((zone) => (
             <span key={zone.label} className={zone.className}>
@@ -2502,7 +2488,7 @@ function DreComparisonEvolutionChart({ rows }: { rows: DreComparisonRow[] }) {
             </span>
           ))}
         </div>
-        <svg viewBox={`0 0 ${width} ${height}`} className="dre-comparison-evolution-chart" role="img" aria-label="Evolução comparativa da margem operacional">
+        <svg viewBox={`0 0 ${width} ${height}`} className="dre-comparison-evolution-chart" role="group" aria-label="Evolução comparativa da margem operacional">
           <line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={paddingTop + innerHeight} className="dre-line-y-axis" />
           <text x={paddingLeft - 118} y={paddingTop + innerHeight / 2} textAnchor="middle" className="dre-line-measure-label" transform={`rotate(-90 ${paddingLeft - 118} ${paddingTop + innerHeight / 2})`}>
             Margem operacional
@@ -2570,7 +2556,10 @@ function DreComparisonEvolutionChart({ rows }: { rows: DreComparisonRow[] }) {
                 const pointY = getY(pointValue);
 
                 return (
-                  <g key={`${item.restaurantId}-${point.key}`}>
+                  <g key={`${item.restaurantId}-${point.key}`}
+                    onMouseEnter={() => setTooltip({ x: (pointX / width) * 100, y: (pointY / height) * 100, restaurantName: item.restaurantName, label: point.label, value: pointValue, color: item.color })}
+                    onClick={() => setTooltip({ x: (pointX / width) * 100, y: (pointY / height) * 100, restaurantName: item.restaurantName, label: point.label, value: pointValue, color: item.color })}>
+                    <circle cx={pointX} cy={pointY} r="14" fill="transparent" role="button" aria-label={`${item.restaurantName}, ${point.label}: ${formatPercent(pointValue)}`} />
                     <circle
                       cx={pointX}
                       cy={pointY}
@@ -2578,6 +2567,10 @@ function DreComparisonEvolutionChart({ rows }: { rows: DreComparisonRow[] }) {
                       fill="#292c42"
                       stroke={item.color}
                       className="dre-evolution-point"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${item.restaurantName}, ${point.label}: ${formatPercent(pointValue)}`}
+                      onKeyDown={activateChartMark}
                       onMouseEnter={() =>
                         setTooltip({
                           x: (pointX / width) * 100,
@@ -2626,20 +2619,11 @@ function DreComparisonEvolutionChart({ rows }: { rows: DreComparisonRow[] }) {
           ))}
         </svg>
         {tooltip ? (
-          <div
-            className="dre-comparison-tooltip"
-            style={
-              {
-                left: `${Math.min(84, Math.max(16, tooltip.x))}%`,
-                top: `${Math.min(78, Math.max(18, tooltip.y))}%`,
-                "--dre-color": tooltip.color
-              } as CSSProperties
-            }
-          >
+          <ChartDetails anchor={anchor}>
             <span>{tooltip.restaurantName}</span>
             <strong>{formatPercent(tooltip.value)}</strong>
             <small>{tooltip.label}</small>
-          </div>
+          </ChartDetails>
         ) : null}
       </div>
       <div className="dre-chart-centered-legend">
@@ -2718,8 +2702,8 @@ function DreRevenueCompositionChart({ rows }: { rows: DreComparisonRow[] }) {
   );
 }
 
-function DreComparisonPanel({ rows }: { rows: DreComparisonRow[] }) {
-  const [selectedMetricKey, setSelectedMetricKey] = useState("revenue");
+function DreComparisonPanel({ rows, preferenceKey }: { rows: DreComparisonRow[]; preferenceKey: string }) {
+  const [selectedMetricKey, setSelectedMetricKey] = useViewState(`${preferenceKey}.metric`, "revenue");
   const bestMargin = [...rows].sort((left, right) => {
     const leftMargin = left.metrics.revenue > 0 ? left.metrics.operationalResult / left.metrics.revenue : -Infinity;
     const rightMargin = right.metrics.revenue > 0 ? right.metrics.operationalResult / right.metrics.revenue : -Infinity;
@@ -2948,19 +2932,10 @@ export function DreAnalysisPanel({
     () => sortedPeriods.filter((period) => effectiveSelectedKeys.includes(period.key)),
     [effectiveSelectedKeys, sortedPeriods]
   );
-  const periodYears = useMemo(
-    () =>
-      [...new Set(sortedPeriods.map((period) => getDrePeriodYear(period)).filter((year): year is number => Boolean(year)))]
-        .sort((left, right) => right - left),
-    [sortedPeriods]
-  );
-  const initialYear =
-    getDrePeriodYear(selectedPeriods[0] ?? fallbackPeriod) ??
-    periodYears[0];
-  const [selectedYear, setSelectedYear] = useState<number | undefined>(initialYear);
+
   const comparisonRestaurants = useMemo<DreComparisonRestaurant[]>(
     () =>
-      (session.memberships ?? []).map((membership) => ({
+      [...new Map((session.memberships ?? []).map((membership) => [membership.restaurantId, membership])).values()].map((membership) => ({
         restaurantId: membership.restaurantId,
         restaurantName: membership.restaurantName,
         photoUrl: membership.photoUrl
@@ -2968,26 +2943,18 @@ export function DreAnalysisPanel({
     [session.memberships]
   );
   const activeRestaurantId = session.activeRestaurantId ?? session.restaurantId;
-  const [comparisonEnabled, setComparisonEnabled] = useState(false);
-  const [selectedComparisonRestaurantIds, setSelectedComparisonRestaurantIds] = useState<string[]>(
-    activeRestaurantId ? [activeRestaurantId] : []
-  );
+  const preferenceKey = `grest.view.${session.userId}.${activeRestaurantId ?? "none"}.dre`;
+  const [comparisonEnabled, setComparisonEnabled] = useViewState(`${preferenceKey}.comparison`, false);
+  const [selectedComparisonRestaurantIds, setSelectedComparisonRestaurantIds] = useViewState<string[]>(`${preferenceKey}.restaurants`,
+    activeRestaurantId ? [activeRestaurantId] : []);
   const [comparisonPeriodMap, setComparisonPeriodMap] = useState<Record<string, DrePeriodData[]>>({});
   const [comparisonLoading, setComparisonLoading] = useState(false);
-  const activeYear = selectedYear ?? initialYear;
-  const yearPeriods = sortedPeriods.filter((period) => getDrePeriodYear(period) === activeYear);
   const displayData = selectedPeriods.length > 1 ? buildConsolidatedDreData(selectedPeriods) : selectedPeriods[0]?.data ?? data;
   const trendPoints = useMemo(
     () => (selectedPeriods.length > 1 ? buildDreTrendPoints(selectedPeriods) : undefined),
     [selectedPeriods]
   );
 
-  useEffect(() => {
-    const nextYear = getDrePeriodYear(selectedPeriods[0] ?? fallbackPeriod) ?? periodYears[0];
-    if (nextYear && nextYear !== selectedYear) {
-      setSelectedYear(nextYear);
-    }
-  }, [fallbackPeriod, periodYears, selectedPeriods, selectedYear]);
 
   useEffect(() => {
     if (!activeRestaurantId) {
@@ -2997,7 +2964,7 @@ export function DreAnalysisPanel({
     setSelectedComparisonRestaurantIds((current) => {
       const validIds = new Set(comparisonRestaurants.map((restaurant) => restaurant.restaurantId));
       const next = current.filter((restaurantId) => validIds.has(restaurantId));
-      return next.includes(activeRestaurantId) ? next : [activeRestaurantId, ...next];
+      return next.length > 0 ? next : [activeRestaurantId];
     });
   }, [activeRestaurantId, comparisonRestaurants]);
 
@@ -3006,7 +2973,8 @@ export function DreAnalysisPanel({
       (restaurantId) => restaurantId !== activeRestaurantId && !comparisonPeriodMap[restaurantId]
     );
 
-    if (missingIds.length === 0) {
+    if (!comparisonEnabled || missingIds.length === 0) {
+      setComparisonLoading(false);
       return;
     }
 
@@ -3036,26 +3004,8 @@ export function DreAnalysisPanel({
     return () => {
       mounted = false;
     };
-  }, [activeRestaurantId, comparisonPeriodMap, selectedComparisonRestaurantIds, session]);
+  }, [activeRestaurantId, comparisonEnabled, comparisonPeriodMap, selectedComparisonRestaurantIds, session]);
 
-  const selectYear = (year: number) => {
-    setSelectedYear(year);
-    const periodsInYear = sortedPeriods.filter((period) => getDrePeriodYear(period) === year);
-    const lastPeriodInYear = periodsInYear[periodsInYear.length - 1];
-    if (lastPeriodInYear) {
-      onSelectPeriod(lastPeriodInYear.key);
-    }
-  };
-
-  const togglePeriod = (periodKey: string) => {
-    const currentYearKeys = yearPeriods.map((period) => period.key);
-    const activeKeysInYear = effectiveSelectedKeys.filter((key) => currentYearKeys.includes(key));
-    const nextKeys = activeKeysInYear.includes(periodKey)
-      ? activeKeysInYear.filter((key) => key !== periodKey)
-      : [...activeKeysInYear, periodKey].sort((left, right) => left.localeCompare(right));
-
-    onSelectPeriod((nextKeys.length > 0 ? nextKeys : [periodKey]).join(DRE_SELECTION_SEPARATOR));
-  };
 
   const toggleComparisonRestaurant = (restaurantId: string) => {
     setSelectedComparisonRestaurantIds((current) => {
@@ -3106,6 +3056,11 @@ export function DreAnalysisPanel({
     selectedComparisonRestaurantIds
   ]);
   const comparisonMode = comparisonEnabled && selectedComparisonRestaurantIds.length > 1 && comparisonRows.length > 1;
+  const comparisonRequested = comparisonEnabled && comparisonRestaurants.length > 1 && selectedComparisonRestaurantIds.length > 1;
+  const comparisonPending = comparisonRequested && (comparisonLoading || selectedComparisonRestaurantIds.some((restaurantId) => restaurantId !== activeRestaurantId && !comparisonPeriodMap[restaurantId]));
+  const missingRestaurants = comparisonRequested && !comparisonPending
+    ? comparisonRestaurants.filter((restaurant) => selectedComparisonRestaurantIds.includes(restaurant.restaurantId) && !comparisonRows.some((row) => row.restaurantId === restaurant.restaurantId))
+    : [];
 
   return (
     <section className="card dre-panel">
@@ -3155,58 +3110,20 @@ export function DreAnalysisPanel({
       {displayData ? (
         <>
           {periods.length > 0 ? (
-            <section className="card compact-card period-filter-card">
-              <div className="section-head">
-                <div>
-                  <h3>Período analisado</h3>
-                  <p>Escolha o ano e marque um ou mais meses para analisar o DRE no recorte desejado.</p>
-                </div>
-              </div>
-
-              {periodYears.length > 1 ? (
-                <div className="filter-bar dre-year-filter" aria-label="Selecionar ano do DRE">
-                  {periodYears.map((year) => (
-                    <button
-                      key={year}
-                      type="button"
-                      className={`filter-pill ${activeYear === year ? "active" : ""}`}
-                      onClick={() => selectYear(year)}
-                    >
-                      {year}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="filter-bar dre-period-filter" aria-label={copy.dreSelectPeriod}>
-                {yearPeriods.map((period) => (
-                  <span
-                    key={period.key}
-                    className={`filter-pill filter-pill-group ${effectiveSelectedKeys.includes(period.key) ? "active" : ""}`}
-                  >
-                    <button type="button" className="filter-pill-main" onClick={() => togglePeriod(period.key)}>
-                      {period.label}
-                    </button>
-                    {canManageData && onRemovePeriod ? (
-                      <button
-                        type="button"
-                        className="filter-pill-remove"
-                        onClick={() => onRemovePeriod(period.key)}
-                        aria-label={`Remover ${period.label}`}
-                        title={`Excluir ${period.label}`}
-                      >
-                        <IconTrash />
-                      </button>
-                    ) : null}
-                  </span>
-                ))}
-              </div>
+            <section className="dre-analysis-controls">
+              <PeriodSelector
+                periods={sortedPeriods.map((period) => ({ key: period.key, label: period.label, year: getDrePeriodYear(period) }))}
+                selectedKeys={effectiveSelectedKeys}
+                multiple
+                onSelect={(keys) => onSelectPeriod(keys.join(DRE_SELECTION_SEPARATOR))}
+                onRemove={canManageData ? onRemovePeriod : undefined}
+              />
 
               <DreComparisonSelector
                 restaurants={comparisonRestaurants}
                 selectedIds={selectedComparisonRestaurantIds}
                 activeRestaurantId={activeRestaurantId}
-                loading={comparisonLoading}
+                loading={comparisonPending}
                 enabled={comparisonEnabled}
                 onModeChange={setComparisonEnabled}
                 onToggle={toggleComparisonRestaurant}
@@ -3214,8 +3131,21 @@ export function DreAnalysisPanel({
             </section>
           ) : null}
 
-          {comparisonMode ? (
-            <DreComparisonPanel rows={comparisonRows} />
+          {missingRestaurants.length > 0 ? <p className="message" role="status">Sem dados no período selecionado: {missingRestaurants.map((restaurant) => restaurant.restaurantName).join(", ")}.</p> : null}
+          {comparisonPending ? <DreProcessingSkeleton /> : comparisonMode ? (
+            <DreComparisonPanel rows={comparisonRows} preferenceKey={preferenceKey} />
+          ) : comparisonRequested ? (
+            <section className="empty-state-card" role="status">
+              <div className="empty-state-inner">
+                <EmptyStateIcon />
+                <h3>Não há dados suficientes para comparar neste período</h3>
+                <p>A comparação precisa de pelo menos dois restaurantes com dados nos meses selecionados.</p>
+                <div className="empty-state-actions">
+                  <button type="button" className="ghost-button" onClick={() => { if (fallbackPeriod) onSelectPeriod(fallbackPeriod.key); }}>Redefinir período</button>
+                  <button type="button" className="ghost-button" onClick={() => setComparisonEnabled(false)}>Visualização única</button>
+                </div>
+              </div>
+            </section>
           ) : (
             <>
               <DreValidationPanel data={displayData} />

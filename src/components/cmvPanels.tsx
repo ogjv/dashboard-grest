@@ -4,6 +4,8 @@ import type { DashboardData, GroupSummary, ImportValidation, PeriodDashboard, Pr
 import { formatCurrency, formatNumber, formatPercent } from "../utils/cmv";
 import { getNavigationIcon } from "./appChrome";
 import { useLocale } from "../i18n";
+import { PeriodSelector } from "./periodSelector";
+import { activateChartMark } from "../hooks/useChartDetails";
 
 type UploadPanelState = {
   data?: DashboardData;
@@ -415,17 +417,6 @@ function IconCostKpi() {
   );
 }
 
-function IconTrash() {
-  return (
-    <svg viewBox="0 0 24 24" className="ui-icon" aria-hidden="true">
-      <path d="M5 7.5h14" />
-      <path d="M9 7.5V5.2h6v2.3" />
-      <path d="M7.5 7.5 8.3 19h7.4l.8-11.5" />
-      <path d="M10 10.5v5.5" />
-      <path d="M14 10.5v5.5" />
-    </svg>
-  );
-}
 
 function ValidationPanel({ validations }: { validations: ImportValidation[] }) {
   const invalid = validations.filter((item) => item.missingColumns.length > 0);
@@ -529,7 +520,7 @@ function DonutChartCard({
       </div>
 
       <div className="donut-layout">
-        <svg viewBox={`0 0 ${size} ${size}`} className="donut-chart" role="img" aria-label={title}>
+        <svg viewBox={`0 0 ${size} ${size}`} className="donut-chart" role="group" aria-label={title}>
           {data.map((slice) => {
             const start = cursor * 360;
             const end = (cursor + slice.share) * 360;
@@ -545,6 +536,10 @@ function DonutChartCard({
                 key={slice.name}
                 d={buildArcPath(cx, cy, outerRadius, innerRadius, start, end)}
                 className={`donut-slice ${isActive ? "active" : ""} ${clickedSlice === slice.name ? "clicked" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`${slice.name}: ${valueFormatter(slice.value)}`}
+                onKeyDown={activateChartMark}
                 style={style}
                 onClick={() => {
                   setClickedSlice(slice.name);
@@ -628,69 +623,26 @@ function GroupFilterBar({
   );
 }
 
-function PeriodFilterBar({
-  dashboards,
-  selectedPeriod,
-  onSelect,
-  onRemovePeriod,
-  canManagePeriods = false,
-  compactOnly = false
-}: {
+function PeriodFilterBar({ dashboards, selectedPeriod, onSelect, onRemovePeriod, canManagePeriods = false }: {
   dashboards: PeriodDashboard[];
   selectedPeriod: string;
   onSelect: (value: string) => void;
   onRemovePeriod?: (value: string) => void;
   canManagePeriods?: boolean;
-  compactOnly?: boolean;
 }) {
-  const { t } = useLocale();
-  if (dashboards.length === 0) {
-    return null;
-  }
-
+  if (dashboards.length === 0) return null;
   return (
-    <section className={compactOnly ? "period-selector-strip" : "card compact-card period-filter-card"}>
-      {!compactOnly ? (
-        <div className="section-head">
-          <div>
-            <h3>{String(t("periodAnalyzed"))}</h3>
-            <p>{String(t("periodAnalyzedText"))}</p>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="filter-bar">
-        <button type="button" className={`filter-pill ${selectedPeriod === TOTAL_PERIOD ? "active" : ""}`} onClick={() => onSelect(TOTAL_PERIOD)}>
-          {String(t("total"))}
-        </button>
-        {dashboards.map((dashboard) => (
-          <span
-            key={dashboard.key}
-            className={`filter-pill filter-pill-group ${selectedPeriod === dashboard.key ? "active" : ""}`}
-            title={
-              dashboard.salesFileName || dashboard.recipeFileName
-                ? `Vendas: ${dashboard.salesFileName ?? "-"} | Ficha técnica: ${dashboard.recipeFileName ?? "-"}`
-                : getPeriodLabel(dashboard)
-            }
-          >
-            <button type="button" className="filter-pill-main" onClick={() => onSelect(dashboard.key)}>
-              {getPeriodLabel(dashboard)}
-            </button>
-            {canManagePeriods && onRemovePeriod ? (
-              <button
-                type="button"
-                className="filter-pill-remove"
-                onClick={() => onRemovePeriod(dashboard.key)}
-                aria-label={`Remover ${getPeriodLabel(dashboard)}`}
-                title={`Excluir ${getPeriodLabel(dashboard)}`}
-              >
-                <IconTrash />
-              </button>
-            ) : null}
-          </span>
-        ))}
-      </div>
-    </section>
+    <PeriodSelector
+      periods={dashboards.map((dashboard) => ({
+        key: dashboard.key,
+        label: getPeriodLabel(dashboard),
+        year: dashboard.data.reportPeriod?.year ?? (dashboard.key.match(/^(\d{4})-/) ? Number(dashboard.key.slice(0, 4)) : undefined)
+      })).sort((left, right) => left.key.localeCompare(right.key))}
+      selectedKeys={[selectedPeriod]}
+      onSelect={(keys) => onSelect(keys[0])}
+      totalKey={TOTAL_PERIOD}
+      onRemove={canManagePeriods ? onRemovePeriod : undefined}
+    />
   );
 }
 
@@ -968,6 +920,16 @@ function GroupExplorer({
     );
   }
 
+  if (visibleProducts.length === 0) {
+    return <section className="card empty-state-card" role="status">
+      <div className="empty-state-inner">
+        <h3>Nenhum produto para o grupo selecionado</h3>
+        <p>Escolha outro grupo para consultar os produtos deste período.</p>
+        <button type="button" className="ghost-button" onClick={onClear}>Redefinir filtro de grupo</button>
+      </div>
+    </section>;
+  }
+
   return (
     <section className="card">
       <div className="section-head">
@@ -1107,7 +1069,7 @@ function ProductHighlights({ products }: { products: ProductSummary[] }) {
   );
 }
 
-function StrategicProductMatrix({ products }: { products: ProductSummary[] }) {
+export function StrategicProductMatrix({ products }: { products: ProductSummary[] }) {
   const { t } = useLocale();
   const validProducts = mergeProductsForDisplay(
     products.filter((item) => item.matchedRecipe && !item.isPromotional && item.revenue > 0 && item.quantity > 0)
@@ -1132,7 +1094,7 @@ function StrategicProductMatrix({ products }: { products: ProductSummary[] }) {
       key: "high-potential",
       title: String(t("strategicHighPotentialTitle")),
       text: String(t("strategicHighPotentialText")),
-      tone: "good",
+      tone: "info",
       items: enrichedProducts
         .filter((item) => item.quantity < quantityCut && item.marginPercent >= highMarginCut)
         .sort(sortByOpportunity)
@@ -1187,8 +1149,8 @@ function StrategicProductMatrix({ products }: { products: ProductSummary[] }) {
       <div className="issue-grid strategic-grid">
         {cards.map((card) => (
           <article key={card.key} className={`issue-card strategic-card ${card.tone}`}>
-            <span className="eyebrow">{card.title}</span>
-            <p>{card.text}</p>
+            <h4 className="strategic-category-title"><span aria-hidden="true" />{card.title}</h4>
+            <p className="strategic-description">{card.text}</p>
 
             {card.items.length > 0 ? (
               <div className="ranking-list">
@@ -1270,7 +1232,16 @@ export function DashboardPanels({
           canManageData={canManageOperationalData}
         />
       ) : null}
-      {!hasDashboardData ? (
+      {!hasDashboardData && periodDashboards.length > 0 ? (
+        <section className="card empty-state-card" role="status">
+          <div className="empty-state-inner">
+            <span className="empty-state-icon" aria-hidden="true">{getNavigationIcon("dashboard")}</span>
+            <h3>Nenhum resultado para o período selecionado</h3>
+            <p>Há dados neste restaurante. Redefina o período para voltar à análise.</p>
+            <button type="button" className="ghost-button" onClick={() => onSelectPeriod(TOTAL_PERIOD)}>Redefinir período</button>
+          </div>
+        </section>
+      ) : !hasDashboardData ? (
         <section className="card empty-state-card">
           <div className="empty-state-inner">
             <span className="empty-state-icon" aria-hidden="true">
@@ -1291,7 +1262,6 @@ export function DashboardPanels({
             onSelect={onSelectPeriod}
             onRemovePeriod={onRemovePeriod}
             canManagePeriods={canManageOperationalData}
-            compactOnly={!canManageOperationalData}
           />
           <GroupFilterBar groups={dashboard.groups} selectedView={selectedView} onSelect={onSelectView} />
 

@@ -257,6 +257,8 @@ export type AccountMember = {
   fullName?: string;
   email?: string;
   photoUrl?: string;
+  emailConfirmedAt?: string | null;
+  createdAt?: string;
   restaurants: Array<{
     restaurantId: string;
     restaurantName: string;

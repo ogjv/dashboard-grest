@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { AccountInvitation, AccountMember, AuthSession } from "../types";
 import type { AccountPanelCopy } from "../presentation/contracts";
 import { ProfileAvatar, UserAvatar } from "./appChrome";
+import { RestaurantNavigatorPanel } from "./dashboardPanels";
+import { FilterSelect } from "./filterSelect";
+import { confirmAction } from "../utils/confirmDialog";
+import { getUserDirectoryStatus, searchDirectoryMembers, userDirectoryStatusLabels } from "../utils/userDirectory";
+import type { UserDirectoryStatus } from "../utils/userDirectory";
 
 type ProfileFormState = {
   restaurantName: string;
@@ -12,13 +17,6 @@ type UserProfileFormState = {
   fullName: string;
   userPhotoUrl?: string;
 };
-
-const normalizeSearchText = (value?: string) =>
-  String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
 
 export type AccountSettingsPanelProps = {
   session: AuthSession;
@@ -89,12 +87,7 @@ const areRestaurantSelectionsEqual = (left: string[], right: string[]) => {
 };
 
 function ManagedMemberCard({
-  member,
-  session,
-  busy,
-  onUpdateMember,
-  onRemoveMember,
-  copy
+  member, session, busy, onUpdateMember, onRemoveMember, copy, onDirtyChange, onBusyChange, onClose
 }: {
   member: AccountMember;
   session: AuthSession;
@@ -102,144 +95,99 @@ function ManagedMemberCard({
   onUpdateMember: UserManagementPanelProps["onUpdateMember"];
   onRemoveMember: UserManagementPanelProps["onRemoveMember"];
   copy: AccountPanelCopy;
+  onDirtyChange: (dirty: boolean) => void;
+  onBusyChange: (busy: boolean) => void;
+  onClose: () => void;
 }) {
-  const initialRestaurantIds = useMemo(
-    () => member.restaurants.map((restaurant) => restaurant.restaurantId).sort(),
-    [member.restaurants]
-  );
-  const [selectedRestaurantIds, setSelectedRestaurantIds] = useState<string[]>(initialRestaurantIds);
+  const initialRestaurantIds = useMemo(() => member.restaurants.map((restaurant) => restaurant.restaurantId).sort(), [member.restaurants]);
+  const [selectedRestaurantIds, setSelectedRestaurantIds] = useState(initialRestaurantIds);
   const [localBusy, setLocalBusy] = useState(false);
   const [localMessage, setLocalMessage] = useState<string>();
   const [localError, setLocalError] = useState<string>();
-
-  useEffect(() => {
-    setSelectedRestaurantIds(initialRestaurantIds);
-  }, [initialRestaurantIds]);
-
+  useEffect(() => { setSelectedRestaurantIds(initialRestaurantIds); }, [initialRestaurantIds]);
   const isCurrentUser = member.userId === session.userId;
   const isImmutable = member.role === "owner" || isCurrentUser;
   const hasChanges = !areRestaurantSelectionsEqual(selectedRestaurantIds, initialRestaurantIds);
-  const canSave = !isImmutable && selectedRestaurantIds.length > 0 && hasChanges && !busy && !localBusy;
-  const canRemove = !isImmutable && !busy && !localBusy;
-
-  const toggleRestaurant = (restaurantId: string) => {
-    if (isImmutable) {
-      return;
-    }
-
-    setSelectedRestaurantIds((current) =>
-      current.includes(restaurantId) ? current.filter((id) => id !== restaurantId) : [...current, restaurantId]
-    );
-  };
+  const status = getUserDirectoryStatus(member);
+  useEffect(() => { onDirtyChange(hasChanges); }, [hasChanges, onDirtyChange]);
+  useEffect(() => { onBusyChange(localBusy); }, [localBusy, onBusyChange]);
 
   const handleSave = async () => {
+    if (isImmutable || busy || localBusy || !hasChanges || selectedRestaurantIds.length === 0) return;
+    setLocalBusy(true);
+    setLocalError(undefined);
+    setLocalMessage(undefined);
     try {
-      setLocalBusy(true);
-      setLocalError(undefined);
-      setLocalMessage(undefined);
-      await onUpdateMember({
-        member,
-        accountRole: "user",
-        restaurantRole: "viewer",
-        restaurantIds: selectedRestaurantIds
-      });
+      await onUpdateMember({ member, accountRole: "user", restaurantRole: "viewer", restaurantIds: selectedRestaurantIds });
       setLocalMessage(copy.teamMemberUpdated);
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : copy.teamMemberImmutable);
-    } finally {
-      setLocalBusy(false);
-    }
+      setLocalError(error instanceof Error ? error.message : "Não foi possível salvar o acesso.");
+    } finally { setLocalBusy(false); }
   };
-
   const handleRemove = async () => {
+    if (isImmutable || busy || localBusy) return;
+    const confirmed = await confirmAction({
+      title: "Remover acesso aos restaurantes?",
+      message: `Os vínculos de ${member.fullName ?? member.email ?? "esta conta"} serão removidos. A conta continuará cadastrada.`,
+      confirmLabel: "Remover acesso", cancelLabel: "Cancelar", tone: "danger"
+    });
+    if (!confirmed) return;
+    setLocalBusy(true);
+    setLocalError(undefined);
+    setLocalMessage(undefined);
     try {
-      setLocalBusy(true);
-      setLocalError(undefined);
-      setLocalMessage(undefined);
       await onRemoveMember(member);
       setLocalMessage(copy.teamMemberRemoved);
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : copy.teamMemberImmutable);
-    } finally {
-      setLocalBusy(false);
-    }
+      setLocalError(error instanceof Error ? error.message : "Não foi possível remover o acesso.");
+    } finally { setLocalBusy(false); }
   };
+  const availableRestaurants = [...new Map((session.memberships ?? []).map((membership) => [membership.restaurantId, membership])).values()];
 
   return (
-    <article className="team-member-card managed-member-card">
-      <div className="team-member-head">
-        <div className="team-member-identity">
-          <UserAvatar
-            session={{
-              ...session,
-              userFullName: member.fullName,
-              userPhotoUrl: member.photoUrl,
-              email: member.email ?? session.email
+    <aside className="user-access-editor" aria-label="Editar acesso do usuário">
+      <div className="user-access-editor-heading">
+        <h3>Acesso da conta</h3>
+        <button type="button" className="user-directory-icon-button" aria-label="Fechar edição de acesso" onClick={onClose} disabled={localBusy}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+        </button>
+      </div>
+      <div className="user-access-identity">
+        <UserAvatar session={{ ...session, userFullName: member.fullName, userPhotoUrl: member.photoUrl, email: member.email ?? "" }} size="md" />
+        <div><strong>{member.fullName || member.email || "Conta sem nome"}</strong><p>{member.email}</p></div>
+      </div>
+      <span className={`user-directory-status ${status}`}>{userDirectoryStatusLabels[status]}</span>
+      <dl className="user-access-facts">
+        <div><dt>Permissão</dt><dd>{member.role === "owner" ? "Owner · acesso completo" : "Somente leitura"}</dd></div>
+        <div><dt>Confirmação do e-mail</dt><dd>{member.emailConfirmedAt === undefined ? "Não consultada" : member.emailConfirmedAt === null ? "Pendente" : "Confirmado"}</dd></div>
+        {member.createdAt ? <div><dt>Cadastro</dt><dd>{new Intl.DateTimeFormat("pt-BR").format(new Date(member.createdAt))}</dd></div> : null}
+      </dl>
+      {status === "pending" ? <p className="user-access-note">O e-mail ainda não foi confirmado. Os vínculos podem ser preparados antes da ativação.</p> : null}
+      {isImmutable ? <p className="user-access-note">{member.role === "owner" ? "Esta conta possui acesso completo aos restaurantes. As permissões de owner não são alteradas nesta tela." : copy.teamMemberImmutable}</p> : (
+        <>
+          <RestaurantNavigatorPanel
+            eyebrow="" title="Restaurantes vinculados" selectionLabel="Restaurantes vinculados"
+            memberships={availableRestaurants}
+            multiple selectedRestaurantIds={selectedRestaurantIds}
+            disabled={busy || localBusy}
+            onActivateRestaurant={(restaurantId) => {
+              setSelectedRestaurantIds((current) => current.includes(restaurantId) ? current.filter((id) => id !== restaurantId) : [...current, restaurantId]);
+              setLocalMessage(undefined);
             }}
-            size="md"
           />
-          <div>
-            <strong>{member.fullName ?? member.email ?? member.userId}</strong>
-            <p>
-              {member.email ?? copy.teamRoleUser}
-              {isCurrentUser ? ` · ${copy.teamYou}` : ""}
-            </p>
+          {selectedRestaurantIds.length === 0 ? <p className="user-access-note">Selecione ao menos um restaurante para conceder acesso.</p> : null}
+          {hasChanges ? <p className="user-access-unsaved" role="status">Alterações ainda não salvas</p> : null}
+          {localError ? <p className="message error" role="alert">{localError}</p> : null}
+          {localMessage ? <p className="message success" role="status">{localMessage}</p> : null}
+          <div className="user-access-editor-actions">
+            <button type="button" className="primary-button" onClick={() => void handleSave()} disabled={!hasChanges || selectedRestaurantIds.length === 0 || busy || localBusy}>
+              {localBusy ? copy.processing : "Salvar acesso"}
+            </button>
+            {member.restaurants.length > 0 ? <button type="button" className="ghost-button danger-button" onClick={() => void handleRemove()} disabled={busy || localBusy}>Remover acesso</button> : null}
           </div>
-        </div>
-        <div className="team-member-meta">
-          <span className="status ok">{member.role === "owner" ? copy.teamRoleOwner : copy.teamRoleUser}</span>
-          <span className="status">{copy.teamRoleViewer}</span>
-        </div>
-      </div>
-
-      <div className="team-management-grid">
-        <article className="mini-stat-card">
-          <span>{copy.teamAccountRole}</span>
-          <strong>{member.role === "owner" ? copy.teamRoleOwner : copy.teamRoleUser}</strong>
-        </article>
-        <article className="mini-stat-card">
-          <span>{copy.teamRestaurantAccess}</span>
-          <strong>{String(selectedRestaurantIds.length)}</strong>
-        </article>
-      </div>
-
-      <div className="team-restaurant-selector">
-        <span>{copy.teamManageMemberText}</span>
-        <div className="team-restaurant-chips">
-          {(session.memberships ?? []).map((membership) => {
-            const isSelected = selectedRestaurantIds.includes(membership.restaurantId);
-
-            return (
-              <button
-                key={`${member.userId}-${membership.restaurantId}`}
-                type="button"
-                className={`team-restaurant-chip selectable ${isSelected ? "selected" : ""}`}
-                onClick={() => toggleRestaurant(membership.restaurantId)}
-                aria-pressed={isSelected}
-                disabled={isImmutable || localBusy || busy}
-              >
-                <strong>{membership.restaurantName}</strong>
-                <small>{copy.ownerInviteAccessLabel}</small>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {selectedRestaurantIds.length === 0 ? <p className="message">{copy.teamNoRestaurants}</p> : null}
-      {isImmutable ? <p className="message">{copy.teamMemberImmutable}</p> : null}
-      {localError ? <p className="message error">{localError}</p> : null}
-      {localMessage ? <p className="message success">{localMessage}</p> : null}
-
-      <div className="team-member-actions managed-member-actions">
-        <button type="button" className="primary-button" onClick={() => void handleSave()} disabled={!canSave}>
-          {copy.teamSaveMember}
-        </button>
-        <button type="button" className="ghost-button danger-button" onClick={() => void handleRemove()} disabled={!canRemove}>
-          {copy.teamRemoveMember}
-        </button>
-      </div>
-    </article>
+        </>
+      )}
+    </aside>
   );
 }
 
@@ -366,242 +314,150 @@ export function AccountSettingsPanel({
 }
 
 export function UserManagementPanel({
-  session,
-  members,
-  membersLoading,
-  inviteForm,
-  inviteBusy,
-  inviteMessage,
-  inviteError,
-  invitations,
-  invitationsLoading,
-  onInviteEmailChange,
-  onInviteRestaurantToggle,
-  onCreateInvitation,
-  onRevokeInvitation,
-  onUpdateMember,
-  onRemoveMember,
-  copy
+  session, members, membersLoading, inviteForm, inviteBusy, inviteMessage, inviteError,
+  invitations, invitationsLoading, onInviteEmailChange, onInviteRestaurantToggle,
+  onCreateInvitation, onRevokeInvitation, onUpdateMember, onRemoveMember, copy
 }: UserManagementPanelProps) {
   const [memberSearch, setMemberSearch] = useState("");
-  const normalizedMemberSearch = useMemo(() => normalizeSearchText(memberSearch), [memberSearch]);
-  const filteredMembers = useMemo(
-    () =>
-      normalizedMemberSearch
-        ? members.filter((member) => {
-            const searchableText = normalizeSearchText(
-              [
-                member.fullName,
-                member.email,
-                ...member.restaurants.map((restaurant) => restaurant.restaurantName)
-              ]
-                .filter(Boolean)
-                .join(" ")
-            );
-            return searchableText.includes(normalizedMemberSearch);
-          })
-        : members,
-    [members, normalizedMemberSearch]
-  );
-  const ownerCount = members.filter((member) => member.role === "owner").length;
-  const userCount = members.filter((member) => member.role !== "owner").length;
-  const restaurantCoverage = new Set(
-    members.flatMap((member) => member.restaurants.map((restaurant) => restaurant.restaurantId))
-  ).size;
+  const deferredSearch = useDeferredValue(memberSearch);
+  const [category, setCategory] = useState<UserDirectoryStatus | "all">("all");
+  const [sort, setSort] = useState("name");
+  const [page, setPage] = useState(1);
+  const [selectedUserId, setSelectedUserId] = useState<string>();
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [editorBusy, setEditorBusy] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedUserId) editorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedUserId]);
+  const counts = useMemo(() => members.reduce((result, member) => {
+    result[getUserDirectoryStatus(member)] += 1;
+    return result;
+  }, { pending: 0, unlinked: 0, linked: 0, unknown: 0 }), [members]);
+  const filteredMembers = useMemo(() => {
+    const matching = searchDirectoryMembers(members, deferredSearch).filter((member) => {
+      const status = getUserDirectoryStatus(member);
+      return category === "all" || status === category || (category === "unlinked" && status === "unknown");
+    });
+    return [...matching].sort((left, right) => {
+      if (sort === "recent") return (Date.parse(right.createdAt ?? "") || 0) - (Date.parse(left.createdAt ?? "") || 0);
+      const leftName = left.fullName || left.email || "";
+      const rightName = right.fullName || right.email || "";
+      return leftName.localeCompare(rightName, "pt-BR", { sensitivity: "base" });
+    });
+  }, [category, deferredSearch, members, sort]);
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filteredMembers.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const selectedMember = members.find((member) => member.userId === selectedUserId);
+  const availableRestaurants = [...new Map((session.memberships ?? []).map((membership) => [membership.restaurantId, membership])).values()];
+  const categories: Array<{ key: UserDirectoryStatus | "all"; label: string; count: number }> = [
+    { key: "all", label: "Todas as contas", count: members.length },
+    ...(members.some((member) => member.emailConfirmedAt !== undefined) ? [{ key: "pending" as const, label: "Aguardando e-mail", count: counts.pending }] : []),
+    { key: "unlinked", label: members.some((member) => member.emailConfirmedAt === undefined) ? "Sem restaurante" : "Ativas sem restaurante", count: counts.unlinked + counts.unknown },
+    { key: "linked", label: "Com acesso", count: counts.linked },
+  ];
+  const selectMember = async (userId?: string) => {
+    if (editorBusy || selectedUserId === userId) return;
+    if (editorDirty && !await confirmAction({
+      title: "Descartar alterações?",
+      message: "As alterações de acesso ainda não foram salvas.",
+      confirmLabel: "Descartar", cancelLabel: "Continuar editando"
+    })) return;
+    setEditorDirty(false);
+    setSelectedUserId(userId);
+  };
 
   return (
-    <section className="card account-panel">
-      <div className="section-head">
-        <div>
-          <h3>{copy.teamTitle}</h3>
-          <p>{copy.teamText}</p>
+    <section className="user-directory" aria-label="Gestão de usuários">
+      <header className="user-directory-heading">
+        <div><h3>Contas e acessos</h3><p>Acompanhe a situação das contas e gerencie o acesso de cada cliente aos restaurantes.</p></div>
+        <span className="user-directory-total">{members.length} conta(s)</span>
+      </header>
+      <div className="user-directory-status-filters" role="group" aria-label="Filtrar contas por situação">
+        {categories.map((item) => (
+          <button type="button" key={item.key} aria-pressed={category === item.key} onClick={() => { setCategory(item.key); setPage(1); }}>
+            <span>{item.label}</span><strong>{item.count}</strong>
+          </button>
+        ))}
+      </div>
+      <div className="user-directory-toolbar">
+        <label className="user-directory-search">
+          <span>Buscar usuário</span>
+          <div>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
+            <input type="search" value={memberSearch} onChange={(event) => { setMemberSearch(event.target.value); setPage(1); }} placeholder="Nome, e-mail ou restaurante" autoComplete="off" />
+          </div>
+        </label>
+        <FilterSelect label="Ordenar por" value={sort} options={[{ value: "name", label: "Nome: A a Z" }, { value: "recent", label: "Cadastros recentes" }]} onChange={(value) => { setSort(value); setPage(1); }} />
+      </div>
+      <div className="user-directory-layout">
+        <div className="user-directory-list-panel" aria-busy={membersLoading || memberSearch !== deferredSearch}>
+          <div className="user-directory-list-heading"><h4>Usuários</h4><span role="status">{membersLoading ? "Carregando…" : `${filteredMembers.length} resultado(s)`}</span></div>
+          {membersLoading ? <p className="user-directory-empty" role="status">Carregando contas cadastradas…</p> : visibleMembers.length === 0 ? (
+            <div className="user-directory-empty" role="status">
+              <strong>{members.length === 0 ? "Nenhuma conta cadastrada" : "Nenhuma conta para este filtro"}</strong>
+              {members.length > 0 ? <button type="button" className="ghost-button" onClick={() => { setMemberSearch(""); setCategory("all"); setPage(1); }}>Redefinir busca e filtros</button> : null}
+            </div>
+          ) : (
+            <ul className="user-directory-list">
+              {visibleMembers.map((member) => {
+                const status = getUserDirectoryStatus(member);
+                return <li key={member.userId}>
+                  <button type="button" className={`user-directory-row ${selectedUserId === member.userId ? "selected" : ""}`}
+                    aria-pressed={selectedUserId === member.userId} aria-label={`Gerenciar ${member.fullName || member.email || "conta"}`}
+                    disabled={editorBusy} onClick={() => void selectMember(member.userId)}>
+                    <span aria-hidden="true"><UserAvatar session={{ ...session, userFullName: member.fullName, userPhotoUrl: member.photoUrl, email: member.email ?? "" }} size="sm" /></span>
+                    <span className="user-directory-row-copy">
+                      <strong>{member.fullName || member.email || "Conta sem nome"}{member.userId === session.userId ? " · Você" : ""}</strong>
+                      <span>{member.email}</span>
+                      <small>{member.role === "owner" ? "Owner · todos os restaurantes" : member.restaurants.length > 0 ? member.restaurants.map((restaurant) => restaurant.restaurantName).join(", ") : "Nenhum restaurante vinculado"}</small>
+                    </span>
+                    <span className={`user-directory-status ${status}`}>{userDirectoryStatusLabels[status]}</span>
+                    <svg className="user-directory-row-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+                  </button>
+                </li>;
+              })}
+            </ul>
+          )}
+          {!membersLoading && filteredMembers.length > pageSize ? (
+            <nav className="user-directory-pagination" aria-label="Páginas de usuários">
+              <button type="button" className="user-directory-icon-button" aria-label="Página anterior" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg></button>
+              <span>Página {currentPage} de {pageCount}</span>
+              <button type="button" className="user-directory-icon-button" aria-label="Próxima página" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg></button>
+            </nav>
+          ) : null}
+        </div>
+        <div className="user-directory-editor-region" ref={editorRef}>
+        {selectedMember ? <ManagedMemberCard key={selectedMember.userId} member={selectedMember} session={session} busy={inviteBusy}
+          onUpdateMember={onUpdateMember} onRemoveMember={onRemoveMember} copy={copy} onDirtyChange={setEditorDirty} onBusyChange={setEditorBusy} onClose={() => void selectMember()} /> : (
+          <aside className="user-access-editor user-access-editor-empty"><h4>Selecione uma conta</h4><p>Os dados e vínculos do cliente aparecerão aqui.</p></aside>
+        )}
         </div>
       </div>
-
-      <div className="account-panel-stack">
-        <section className="account-restaurant-section user-management-overview-section">
-          <div className="team-management-grid user-management-summary-grid">
-            <article className="mini-stat-card">
-              <span>{copy.teamMembersTotal}</span>
-              <strong>{String(members.length)}</strong>
-            </article>
-            <article className="mini-stat-card">
-              <span>{copy.teamAdminsTotal}</span>
-              <strong>{String(ownerCount)}</strong>
-            </article>
-            <article className="mini-stat-card">
-              <span>{copy.teamUsersTotal}</span>
-              <strong>{String(userCount)}</strong>
-            </article>
-            <article className="mini-stat-card">
-              <span>{copy.teamRestaurantsTotal}</span>
-              <strong>{String(restaurantCoverage)}</strong>
-            </article>
-          </div>
-
-          <section className="account-form-card user-management-model-card">
-            <div className="section-head compact">
-              <div>
-                <h3>{copy.teamAccessModel}</h3>
-                <p>{copy.teamAccessModelText}</p>
-              </div>
-            </div>
-          </section>
-        </section>
-
-        <section className="account-restaurant-section owner-invite-section">
-          <div className="section-head compact">
-            <div>
-              <h3>{copy.ownerInviteTitle}</h3>
-              <p>{copy.ownerInviteText}</p>
-            </div>
-          </div>
-
-          <div className="account-panel-grid owner-invite-grid">
-            <section className="account-form-card owner-invite-card">
-              <label className="auth-field">
-                <span>{copy.ownerInviteEmail}</span>
-                <input
-                  value={inviteForm.email}
-                  onChange={(event) => onInviteEmailChange(event.target.value)}
-                  placeholder="nome@empresa.com"
-                />
-              </label>
-
-              <div className="team-restaurant-selector">
-                <span>{copy.ownerInviteRestaurants}</span>
-                <div className="team-restaurant-chips">
-                  {(session.memberships ?? []).map((membership) => {
-                    const isSelected = inviteForm.restaurantIds.includes(membership.restaurantId);
-
-                    return (
-                      <button
-                        key={`account-invite-${membership.restaurantId}`}
-                        type="button"
-                        className={`team-restaurant-chip selectable ${isSelected ? "selected" : ""}`}
-                        onClick={() => onInviteRestaurantToggle(membership.restaurantId)}
-                        aria-pressed={isSelected}
-                      >
-                        <strong>{membership.restaurantName}</strong>
-                        <small>{copy.ownerInviteAccessLabel}</small>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <p className="message">{copy.ownerInviteHint}</p>
-              {inviteError ? <p className="message error">{inviteError}</p> : null}
-              {inviteMessage ? <p className="message success">{inviteMessage}</p> : null}
-
-              <div className="panel-actions">
-                <button type="button" className="primary-button" onClick={onCreateInvitation} disabled={inviteBusy}>
-                  {inviteBusy ? copy.processing : copy.ownerInviteAction}
-                </button>
-              </div>
-            </section>
-
-            <section className="account-form-card owner-invite-card owner-invite-list-card">
-              <div className="section-head compact">
-                <div>
-                  <h3>{copy.ownerInvitePending}</h3>
-                  <p>{copy.ownerInvitePendingText}</p>
-                </div>
-              </div>
-
-              {invitationsLoading ? <p className="message">{copy.processing}</p> : null}
-              {!invitationsLoading && invitations.length === 0 ? <p className="message">{copy.ownerInviteEmpty}</p> : null}
-
-              {!invitationsLoading && invitations.length > 0 ? (
-                <div className="restaurant-member-list">
-                  {invitations.map((invitation) => (
-                    <article key={invitation.invitationId} className="restaurant-member-card">
-                      <div>
-                        <strong>{invitation.email}</strong>
-                        <p>{copy.ownerInviteAccessLabel}</p>
-                      </div>
-                      <div className="restaurant-member-actions">
-                        <button
-                          type="button"
-                          className="ghost-button danger-button"
-                          onClick={() => onRevokeInvitation(invitation.invitationId)}
-                          disabled={inviteBusy}
-                        >
-                          {copy.ownerInviteRevoke}
-                        </button>
-                      </div>
-                      <div className="team-restaurant-chips">
-                        {invitation.restaurants.map((restaurant) => (
-                          <span key={`${invitation.invitationId}-${restaurant.restaurantId}`} className="team-restaurant-chip">
-                            <strong>{restaurant.restaurantName}</strong>
-                          </span>
-                        ))}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-          </div>
-        </section>
-
-        <section className="account-restaurant-section user-management-members-section">
-          <div className="section-head compact">
-            <div>
-              <h3>{copy.teamManageMember}</h3>
-              <p>{copy.teamManageMemberText}</p>
-            </div>
-          </div>
-
-          <div className="user-management-search-card">
-            <label className="auth-field user-management-search-field">
-              <span>Buscar usuário</span>
-              <input
-                value={memberSearch}
-                onChange={(event) => setMemberSearch(event.target.value)}
-                placeholder="Digite nome, e-mail ou restaurante"
-                type="search"
-              />
-            </label>
-            <div className="user-management-search-meta">
-              <span>
-                {memberSearch.trim()
-                  ? `${filteredMembers.length} de ${members.length} usuário(s) encontrados`
-                  : `${members.length} usuário(s) cadastrados`}
-              </span>
-              {memberSearch.trim() ? (
-                <button type="button" className="ghost-button" onClick={() => setMemberSearch("")}>
-                  Limpar busca
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          {membersLoading ? <section className="account-form-card"><p className="message">{copy.processing}</p></section> : null}
-          {!membersLoading && members.length === 0 ? <section className="account-form-card"><p className="message">{copy.teamEmpty}</p></section> : null}
-          {!membersLoading && members.length > 0 && filteredMembers.length === 0 ? (
-            <section className="account-form-card">
-              <p className="message">Nenhum usuário foi encontrado para essa busca.</p>
-            </section>
-          ) : null}
-
-          {!membersLoading && filteredMembers.length > 0 ? (
-            <div className="team-members-grid compact user-management-members-grid">
-              {filteredMembers.map((member) => (
-                <ManagedMemberCard
-                  key={member.membershipId}
-                  member={member}
-                  session={session}
-                  busy={inviteBusy}
-                  onUpdateMember={onUpdateMember}
-                  onRemoveMember={onRemoveMember}
-                  copy={copy}
-                />
-              ))}
-            </div>
-          ) : null}
-        </section>
-      </div>
+      <details className="user-invitation-section">
+        <summary>Convidar por e-mail</summary>
+        <form className="user-invitation-form" onSubmit={(event) => { event.preventDefault(); onCreateInvitation(); }}>
+          <label className="auth-field"><span>E-mail do cliente</span><input type="email" required value={inviteForm.email} onChange={(event) => onInviteEmailChange(event.target.value)} placeholder="nome@empresa.com" disabled={inviteBusy} /></label>
+          <RestaurantNavigatorPanel eyebrow="" title="Restaurantes do convite" selectionLabel="Restaurantes do convite" memberships={availableRestaurants} multiple selectedRestaurantIds={inviteForm.restaurantIds} onActivateRestaurant={onInviteRestaurantToggle} disabled={inviteBusy} />
+          <button type="submit" className="primary-button" disabled={inviteBusy || inviteForm.restaurantIds.length === 0}>{inviteBusy ? copy.processing : copy.ownerInviteAction}</button>
+        </form>
+      </details>
+      {inviteError ? <p className="message error" role="alert">{inviteError}</p> : null}
+      {inviteMessage ? <p className="message success" role="status">{inviteMessage}</p> : null}
+      <details className="user-invitation-section">
+        <summary>Convites pendentes <span>{invitations.length}</span></summary>
+        <p className="user-access-note">Convites de acesso ainda não aceitos. Esta lista é diferente das contas que aguardam confirmação de e-mail.</p>
+        {invitationsLoading ? <p role="status">{copy.processing}</p> : invitations.length === 0 ? <p>{copy.ownerInviteEmpty}</p> : (
+          <ul className="user-invitations-list">
+            {invitations.map((invitation) => <li key={invitation.invitationId}>
+              <div><strong>{invitation.email}</strong><span>{invitation.restaurants.map((restaurant) => restaurant.restaurantName).join(", ")}</span></div>
+              <button type="button" className="ghost-button danger-button" onClick={() => onRevokeInvitation(invitation.invitationId)} disabled={inviteBusy}>{copy.ownerInviteRevoke}</button>
+            </li>)}
+          </ul>
+        )}
+      </details>
     </section>
   );
 }

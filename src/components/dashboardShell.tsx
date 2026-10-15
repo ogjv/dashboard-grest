@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useRef } from "react";
 import { BrandMark, DashboardShellHeader, InternalNavigation, UserAvatar } from "./appChrome";
 import { HelpPage } from "./helpPage";
 import { RestaurantNavigatorPanel } from "./dashboardPanels";
@@ -117,26 +117,6 @@ const fallbackCard = (processingLabel: string) => (
   </section>
 );
 
-function ActiveRestaurantBadge({ session }: { session: AuthSession }) {
-  const activeRestaurantId = session.activeRestaurantId ?? session.restaurantId;
-  const activeMembership = (session.memberships ?? []).find((membership) => membership.restaurantId === activeRestaurantId);
-  const restaurantName = session.activeRestaurantName ?? activeMembership?.restaurantName ?? session.restaurantName ?? "Restaurante";
-  const photoUrl = session.activeRestaurantPhotoUrl ?? activeMembership?.photoUrl;
-  const initials = restaurantName.slice(0, 2).toUpperCase();
-
-  return (
-    <div className="active-restaurant-badge" aria-label={`Restaurante ativo: ${restaurantName}`}>
-      <span className={`active-restaurant-badge-avatar ${photoUrl ? "has-photo" : ""}`} aria-hidden="true">
-        {photoUrl ? <img src={photoUrl} alt="" /> : initials}
-      </span>
-      <span className="active-restaurant-badge-copy">
-        <small>Restaurante ativo</small>
-        <strong title={restaurantName}>{restaurantName}</strong>
-      </span>
-    </div>
-  );
-}
-
 export function DashboardShell({
   locale,
   theme,
@@ -172,9 +152,29 @@ export function DashboardShell({
   brandTagline,
   processingLabel
 }: DashboardShellProps) {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLElement>(null);
+  const contextRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const updateHeights = () => {
+      shellRef.current?.style.setProperty("--workspace-navigation-height", `${navigationRef.current?.getBoundingClientRect().height ?? 0}px`);
+      shellRef.current?.style.setProperty("--workspace-context-height", `${contextRef.current?.getBoundingClientRect().height ?? 0}px`);
+    };
+    updateHeights();
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(updateHeights);
+    if (navigationRef.current) observer?.observe(navigationRef.current);
+    if (contextRef.current) observer?.observe(contextRef.current);
+    window.addEventListener("resize", updateHeights);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateHeights);
+    };
+  }, []);
+  const userName = effectiveSession.userFullName?.trim() || effectiveSession.email;
+
   return (
-    <div className="dashboard-shell">
-      <aside className="dashboard-sidebar">
+    <div className="dashboard-shell" ref={shellRef}>
+      <aside className="dashboard-sidebar" ref={navigationRef}>
         <div className="dashboard-sidebar-brand">
           <BrandMark tagline={brandTagline} />
         </div>
@@ -199,20 +199,27 @@ export function DashboardShell({
             >
               <IconHelp />
             </button>
-            <button
-              type="button"
-              className={`sidebar-account-menu-button sidebar-avatar-button ${currentSection === "account" ? "active" : ""}`}
-              onClick={onOpenAccount}
-              aria-label={myAccountLabel}
-              data-ui-tooltip={myAccountLabel}
-            >
-              <UserAvatar session={effectiveSession} size="md" />
-            </button>
           </div>
         </div>
       </aside>
 
       <main className="dashboard-main">
+        <header className="workspace-context-bar" aria-label="Restaurante e usuário ativos" ref={contextRef}>
+          {(effectiveSession.memberships?.length ?? 0) > 0 ? (
+            <RestaurantNavigatorPanel
+              eyebrow={restaurantNavigatorCopy.eyebrow}
+              title={restaurantNavigatorCopy.title}
+              description={restaurantNavigatorCopy.description}
+              memberships={effectiveSession.memberships ?? []}
+              activeRestaurantId={effectiveSession.activeRestaurantId ?? effectiveSession.restaurantId}
+              onActivateRestaurant={onActivateRestaurant}
+            />
+          ) : <div className="workspace-context-empty"><small>Restaurante ativo</small><strong>{effectiveSession.activeRestaurantName ?? effectiveSession.restaurantName ?? "Nenhum restaurante vinculado"}</strong></div>}
+          <button type="button" className="workspace-context-user" onClick={onOpenAccount} aria-label={`${myAccountLabel}: ${userName}`} title={effectiveSession.email}>
+            <span aria-hidden="true"><UserAvatar session={effectiveSession} size="sm" /></span>
+            <span className="workspace-context-user-copy"><small>Usuário logado</small><strong>{userName}</strong></span>
+          </button>
+        </header>
         <div className="content dashboard-content">
           <DashboardShellHeader
             session={effectiveSession}
@@ -226,21 +233,6 @@ export function DashboardShell({
             languageLabel={languageLabel}
             themeLabels={themeLabels}
           />
-
-          {currentSection === "dashboard" || currentSection === "dre" || currentSection === "goods-entry" || currentSection === "operational-history" ? (
-            <ActiveRestaurantBadge session={effectiveSession} />
-          ) : null}
-
-          {currentSection === "dashboard" || currentSection === "dre" || currentSection === "goods-entry" || currentSection === "operational-history" ? (
-            <RestaurantNavigatorPanel
-              eyebrow={restaurantNavigatorCopy.eyebrow}
-              title={restaurantNavigatorCopy.title}
-              description={restaurantNavigatorCopy.description}
-              memberships={effectiveSession.memberships ?? []}
-              activeRestaurantId={effectiveSession.activeRestaurantId}
-              onActivateRestaurant={onActivateRestaurant}
-            />
-          ) : null}
 
           {currentSection === "dre" ? (
             <Suspense fallback={fallbackCard(processingLabel)}>
@@ -262,7 +254,7 @@ export function DashboardShell({
 
           {currentSection === "goods-entry" ? (
             <Suspense fallback={fallbackCard(processingLabel)}>
-              <LazyGoodsEntryPanels canManageData={canManageOperationalData} {...goodsEntryPanelProps} />
+              <LazyGoodsEntryPanels canManageData={canManageOperationalData} {...goodsEntryPanelProps} preferenceKey={`grest.view.${effectiveSession.userId}.${effectiveSession.activeRestaurantId ?? effectiveSession.restaurantId ?? "none"}.goods-entry`} />
             </Suspense>
           ) : null}
 

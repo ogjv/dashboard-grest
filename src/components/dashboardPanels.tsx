@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+import { navigateDetailsMenu } from "../utils/menuKeyboard";
+
 type RestaurantTileMembership = {
   membershipId: string;
   restaurantId: string;
@@ -11,6 +14,10 @@ type RestaurantNavigatorPanelProps = {
   description?: string;
   memberships: RestaurantTileMembership[];
   activeRestaurantId?: string;
+  multiple?: boolean;
+  selectedRestaurantIds?: string[];
+  selectionLabel?: string;
+  disabled?: boolean;
   onActivateRestaurant: (restaurantId: string) => void;
 };
 
@@ -45,52 +52,82 @@ type DashboardReadOnlyGuideProps = {
 };
 
 export function RestaurantNavigatorPanel({
-  eyebrow,
   title,
-  description,
   memberships,
   activeRestaurantId,
+  multiple = false,
+  selectedRestaurantIds = [],
+  selectionLabel: customLabel,
+  disabled = false,
   onActivateRestaurant
 }: RestaurantNavigatorPanelProps) {
-  const hasMultipleRestaurants = memberships.length > 1;
-  const shouldShowEyebrow = eyebrow.trim().toLowerCase() !== title.trim().toLowerCase();
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  const [query, setQuery] = useState("");
+  const selectedRestaurants = memberships.filter((membership) => selectedRestaurantIds.includes(membership.restaurantId));
+  const active = multiple ? selectedRestaurants[0] : memberships.find((membership) => membership.restaurantId === activeRestaurantId) ?? memberships[0];
+  const selectionLabel = multiple
+    ? selectedRestaurants.length > 1 ? `${selectedRestaurants.length} restaurantes selecionados` : active?.restaurantName ?? "Selecionar restaurantes"
+    : active?.restaurantName ?? "Nenhum restaurante";
+  const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const options = memberships.filter((membership) => normalize(membership.restaurantName).includes(normalize(query)));
+  useEffect(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) menuRef.current?.removeAttribute("open");
+    };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, []);
 
   return (
-    <section className="card restaurant-overview-panel">
-      <div className="section-head compact">
-        <div>
-          {shouldShowEyebrow ? <span className="eyebrow">{eyebrow}</span> : null}
-          <h3>{title}</h3>
-          {hasMultipleRestaurants && description ? <p>{description}</p> : null}
-        </div>
-      </div>
-
-      <div className="restaurant-navigator-grid">
-        {memberships.map((membership) => {
-          const isActive = membership.restaurantId === activeRestaurantId;
+    <details className={`restaurant-switcher${multiple ? " restaurant-switcher-multiple" : ""}`} ref={menuRef} onKeyDown={(event) => {
+      if (!disabled) navigateDetailsMenu(event);
+    }}>
+      <summary aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }} aria-label={multiple ? `${customLabel ?? "Selecionar restaurantes para comparar"}: ${selectionLabel}` : `Selecionar restaurante: ${selectionLabel}`}>
+        <span className="restaurant-switcher-avatar" aria-hidden="true">
+          {active?.photoUrl ? <img src={active.photoUrl} alt="" /> : active?.restaurantName.slice(0, 2).toUpperCase() ?? "--"}
+        </span>
+        <span className="restaurant-switcher-identity"><small>{customLabel ?? (multiple ? "Restaurantes da comparação" : "Restaurante ativo")}</small><strong>{selectionLabel}</strong>{multiple && selectedRestaurants.length > 1 ? <span className="selection-description">{selectedRestaurants.map((restaurant) => restaurant.restaurantName).join(", ")}</span> : null}</span>
+        <svg viewBox="0 0 24 24" className="filter-select-chevron" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+      </summary>
+      <div className="restaurant-switcher-menu" aria-label={title}>
+        <input type="search" aria-label="Buscar restaurante" placeholder="Buscar restaurante" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <div className="restaurant-switcher-options">
+        {options.map((membership) => {
+          const isActive = multiple ? selectedRestaurantIds.includes(membership.restaurantId) : membership.restaurantId === activeRestaurantId;
 
           return (
             <button
               key={membership.membershipId}
               type="button"
-              className={`restaurant-tile ${isActive ? "active" : ""}`}
-              onClick={() => onActivateRestaurant(membership.restaurantId)}
+              className={`restaurant-switcher-option ${isActive ? "active" : ""}`}
+              aria-pressed={isActive}
+              disabled={disabled}
+              onClick={() => {
+                onActivateRestaurant(membership.restaurantId);
+                if (!multiple) {
+                  menuRef.current?.removeAttribute("open");
+                  setQuery("");
+                }
+              }}
             >
-              <div className={`restaurant-tile-avatar ${membership.photoUrl ? "has-photo" : ""}`}>
+              <div className="restaurant-switcher-avatar" aria-hidden="true">
                 {membership.photoUrl ? (
                   <img src={membership.photoUrl} alt={membership.restaurantName} />
                 ) : (
                   <span>{membership.restaurantName.slice(0, 2).toUpperCase()}</span>
                 )}
               </div>
-              <div className="restaurant-tile-copy">
+              <div className="restaurant-switcher-identity">
                 <strong>{membership.restaurantName}</strong>
               </div>
+              {multiple ? <span className="restaurant-switcher-check" aria-hidden="true">{isActive ? "✓" : ""}</span> : null}
             </button>
           );
         })}
+        {options.length === 0 ? <p className="restaurant-switcher-empty">Nenhum restaurante encontrado.</p> : null}
+        </div>
       </div>
-    </section>
+    </details>
   );
 }
 

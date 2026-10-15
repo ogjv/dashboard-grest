@@ -503,39 +503,54 @@ const toAuthSession = async (
   };
 };
 
+const loadDirectoryPages = async <T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>,
+  errorMessage: string,
+  start = 0
+): Promise<T[]> => {
+  const result: T[] = [];
+  for (let offset = start; ; offset += 500) {
+    const page = await fetchPage(offset, offset + 499);
+    if (page.error) throw asError(page.error, errorMessage);
+    const rows = Array.isArray(page.data) ? page.data as T[] : [];
+    result.push(...rows);
+    if (rows.length < 500) return result;
+  }
+};
+
 export const loadAccountMembers = async (accountId: string): Promise<AccountMember[]> => {
   if (!supabase || !accountId) {
     return [];
   }
+  const client = supabase;
 
-  const { data: profiles, error: profilesError } = await supabase
-    .from("user_profiles")
-    .select("user_id, global_role, email, full_name, photo_url")
-    .order("created_at", { ascending: true });
-
-  const filteredProfilesError = profilesError;
-  if (profilesError) {
-    throw asError(filteredProfilesError, "Não foi possível carregar os perfis da equipe.");
-  }
-
-  const visibleProfiles = (profiles ?? []) as Array<{
+  type DirectoryProfile = {
     user_id: string;
     global_role?: LegacyGlobalRole | null;
     email?: string | null;
     full_name: string | null;
     photo_url: string | null;
-  }>;
-
-  const { data, error } = await supabase
-    .from("account_memberships")
-    .select("id, account_id, user_id, role")
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    throw asError(error, "Não foi possível carregar os membros da conta.");
+    email_confirmed_at?: string | null;
+    created_at?: string;
+  };
+  const directory = await client.rpc("list_users_for_global_owner").range(0, 499);
+  let visibleProfiles: DirectoryProfile[];
+  if (directory.error) {
+    if (!["PGRST202", "42883"].includes(directory.error.code)) {
+      throw asError(directory.error, "Não foi possível consultar as contas cadastradas.");
+    }
+    visibleProfiles = await loadDirectoryPages<DirectoryProfile>((from, to) => client.from("user_profiles")
+      .select("user_id, global_role, email, full_name, photo_url").order("created_at", { ascending: true }).order("user_id").range(from, to),
+      "Não foi possível carregar os perfis da equipe.");
+  } else {
+    visibleProfiles = (directory.data ?? []) as DirectoryProfile[];
+    if (visibleProfiles.length === 500) visibleProfiles.push(...await loadDirectoryPages<DirectoryProfile>(
+      (from, to) => client.rpc("list_users_for_global_owner").range(from, to), "Não foi possível consultar as contas cadastradas.", 500));
   }
 
-  const memberships = (data ?? []) as AccountMembershipRow[];
+  const memberships = await loadDirectoryPages<AccountMembershipRow>((from, to) => client.from("account_memberships")
+    .select("id, account_id, user_id, role").order("created_at", { ascending: true }).order("id").range(from, to),
+    "Não foi possível carregar os membros da conta.");
   if (memberships.length === 0 && visibleProfiles.length === 0) {
     return [];
   }
@@ -543,13 +558,12 @@ export const loadAccountMembers = async (accountId: string): Promise<AccountMemb
   const userIds = [...new Set([...memberships.map((item) => item.user_id), ...visibleProfiles.map((item) => item.user_id)])];
   const profileMap = new Map(visibleProfiles.map((item) => [item.user_id, item]));
 
-  const { data: restaurantMemberships, error: restaurantMembershipsError } = await supabase
-    .from("restaurant_memberships")
-    .select("user_id, role, restaurants(id, account_id, name)")
-    .in("user_id", userIds);
-
-  if (restaurantMembershipsError) {
-    throw asError(restaurantMembershipsError, "Não foi possível carregar os acessos aos restaurantes.");
+  const restaurantMemberships: RestaurantMembershipAccessRow[] = [];
+  for (let offset = 0; offset < userIds.length; offset += 100) {
+    const batch = userIds.slice(offset, offset + 100);
+    restaurantMemberships.push(...await loadDirectoryPages<RestaurantMembershipAccessRow>((from, to) => client.from("restaurant_memberships")
+      .select("user_id, role, restaurants(id, account_id, name)").in("user_id", batch)
+      .order("user_id").order("restaurant_id").range(from, to), "Não foi possível carregar os acessos aos restaurantes."));
   }
 
   const restaurantsByUser = new Map<
@@ -561,7 +575,7 @@ export const loadAccountMembers = async (accountId: string): Promise<AccountMemb
     }>
   >();
 
-  ((restaurantMemberships ?? []) as RestaurantMembershipAccessRow[]).forEach((membership) => {
+  restaurantMemberships.forEach((membership) => {
     const restaurant = Array.isArray(membership.restaurants) ? membership.restaurants[0] : membership.restaurants;
     if (!restaurant) {
       return;
@@ -597,6 +611,8 @@ export const loadAccountMembers = async (accountId: string): Promise<AccountMemb
       fullName: profile?.full_name ?? undefined,
       email: profile?.email ?? undefined,
       photoUrl: profile?.photo_url ?? undefined,
+      emailConfirmedAt: profile?.email_confirmed_at,
+      createdAt: profile?.created_at,
       restaurants:
         restaurantsByUser.get(userId)?.sort((left, right) => left.restaurantName.localeCompare(right.restaurantName)) ??
         []

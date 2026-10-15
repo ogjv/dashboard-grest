@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import type { GoodsEntryImportData, GoodsEntryRow } from "../types";
 import { formatCurrency, formatNumber } from "../utils/cmv";
 import { confirmAction } from "../utils/confirmDialog";
 import { getNavigationIcon } from "./appChrome";
 import { FilterSelect } from "./filterSelect";
+import { useViewState } from "../hooks/useViewState";
+import { activateChartMark } from "../hooks/useChartDetails";
 
 export type GoodsEntryPanelsProps = {
+  preferenceKey?: string;
   data?: GoodsEntryImportData;
   error?: string;
   message?: string;
@@ -622,7 +625,7 @@ function GoodsEntryDonut({
       </div>
 
       <div className="goods-entry-donut-layout">
-        <svg viewBox="0 0 240 240" className="goods-entry-donut-svg" role="img" aria-label={title}>
+        <svg viewBox="0 0 240 240" className="goods-entry-donut-svg" role="group" aria-label={title}>
           {arcs.map((arc) => {
             const isActive = activeLabel === arc.label;
             const path = buildArcPath(120, 120, isActive ? 104 : 98, 58, arc.startAngle, arc.endAngle);
@@ -632,6 +635,10 @@ function GoodsEntryDonut({
                 d={path}
                 fill={arc.color}
                 className={`goods-entry-donut-segment ${isActive ? "active" : ""} ${clickedSlice === arc.label ? "clicked" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`${arc.label}: ${formatCurrency(arc.value)}`}
+                onKeyDown={activateChartMark}
                 onClick={() => {
                   setClickedSlice(arc.label);
                   window.setTimeout(() => {
@@ -869,11 +876,13 @@ function GoodsEntrySubgroupDrilldown({
   );
 }
 
-export function GoodsEntryPanels({ data, error, message, processing, canManageData, onImport, onClear, onRemoveImportedPeriod }: GoodsEntryPanelsProps) {
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [selectedGroup, setSelectedGroup] = useState("__ALL__");
-  const [selectedSubgroup, setSelectedSubgroup] = useState("__ALL__");
+export function GoodsEntryPanels({ data, error, message, processing, canManageData, onImport, onClear, onRemoveImportedPeriod, preferenceKey }: GoodsEntryPanelsProps) {
+  const [filters, setFilters] = useViewState(preferenceKey, { dateFrom: "", dateTo: "", selectedGroup: "__ALL__", selectedSubgroup: "__ALL__" });
+  const { dateFrom, dateTo, selectedGroup, selectedSubgroup } = filters;
+  const setDateFrom = (value: string) => setFilters((current) => ({ ...current, dateFrom: value }));
+  const setDateTo = (value: string) => setFilters((current) => ({ ...current, dateTo: value }));
+  const setSelectedGroup = (value: string) => setFilters((current) => ({ ...current, selectedGroup: value }));
+  const setSelectedSubgroup = useCallback((value: string) => setFilters((current) => ({ ...current, selectedSubgroup: value })), [setFilters]);
   const [focusedGroup, setFocusedGroup] = useState<string>();
   const [openCalendar, setOpenCalendar] = useState<CalendarField | null>(null);
 
@@ -913,19 +922,21 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
   );
 
   useEffect(() => {
-    setDateFrom("");
-    setDateTo("");
-    setSelectedGroup("__ALL__");
-    setSelectedSubgroup("__ALL__");
     setFocusedGroup(undefined);
     setOpenCalendar(null);
   }, [dataVersion]);
 
   useEffect(() => {
-    if (selectedSubgroup !== "__ALL__" && !subgroups.includes(selectedSubgroup)) {
+    if (data && selectedSubgroup !== "__ALL__" && !subgroups.includes(selectedSubgroup)) {
       setSelectedSubgroup("__ALL__");
     }
-  }, [selectedSubgroup, subgroups]);
+  }, [data, selectedSubgroup, setSelectedSubgroup, subgroups]);
+
+  const resetFilters = () => {
+    setFilters({ dateFrom: "", dateTo: "", selectedGroup: "__ALL__", selectedSubgroup: "__ALL__" });
+    setFocusedGroup(undefined);
+    setOpenCalendar(null);
+  };
 
   const filteredEntries = useMemo(
     () =>
@@ -1006,7 +1017,7 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
       ) : null}
       {processing ? <GoodsEntryProcessingSkeleton /> : null}
 
-      {!data ? (
+      {!data || sourceEntries.length === 0 ? (
         <section className="card empty-state-card">
           <div className="empty-state-inner">
             <EmptyStateIcon />
@@ -1121,14 +1132,7 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
               <button
                 type="button"
                 className="ghost-button"
-                onClick={() => {
-                  setDateFrom("");
-                  setDateTo("");
-                  setSelectedGroup("__ALL__");
-                  setSelectedSubgroup("__ALL__");
-                  setFocusedGroup(undefined);
-                  setOpenCalendar(null);
-                }}
+                onClick={resetFilters}
               >
                 Limpar filtros
               </button>
@@ -1145,6 +1149,7 @@ export function GoodsEntryPanels({ data, error, message, processing, canManageDa
                 <EmptyStateIcon />
                 <h3>Nenhum lançamento no recorte</h3>
                 <p>Ajuste as datas, grupo ou subgrupo para ampliar a leitura das entradas de mercadorias.</p>
+                <button type="button" className="ghost-button" onClick={resetFilters}>Redefinir filtros</button>
               </div>
             </section>
           ) : (
