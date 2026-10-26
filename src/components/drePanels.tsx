@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import type { AuthSession, DreImportData, DrePeriodData, PersistedWorkspace, RestaurantMembership } from "../types";
+import type { AuthSession, DreImportData, DreInventoryConfig, DrePeriodData, PersistedWorkspace, RestaurantMembership } from "../types";
 import { formatCurrency, formatPercent } from "../utils/cmv";
 import { loadRestaurantWorkspace } from "../utils/auth";
 import { loadCloudWorkspace } from "../utils/cloudAuth";
@@ -11,6 +11,11 @@ import { RestaurantNavigatorPanel } from "./dashboardPanels";
 import { useViewState } from "../hooks/useViewState";
 import { ChartDetails } from "./chartDetails";
 import { getDreTaxValue } from "../utils/dreTaxes";
+import { getDreOccupancyValue } from "../utils/dreOccupancy";
+import { combineDreAnalysis, prepareDrePeriods } from "../utils/dreAnalysis";
+import { isDreCostSection } from "../utils/dreInventory";
+import { DreClosingReconciliation, DreInventoryPanel } from "./dreInventoryPanel";
+import { confirmAction } from "../utils/confirmDialog";
 import { activateChartMark, useChartDetails } from "../hooks/useChartDetails";
 
 const drePalette = ["#2f6f5e", "#c9823a", "#496f9f", "#8b6f47", "#6f7785", "#a55c7a", "#5f7f4f", "#6a5acd", "#4f8a8b", "#b08d57"];
@@ -81,6 +86,8 @@ export type DreAnalysisPanelProps = {
   onImport: (file: File) => void;
   onSelectPeriod: (period: string) => void;
   onRemovePeriod?: (period: string) => void;
+  onSaveInventory?: (period: string, config: DreInventoryConfig) => Promise<boolean | void> | boolean | void;
+  onInventoryDirtyChange?: (dirty: boolean) => void;
 };
 
 const polarToCartesian = (cx: number, cy: number, r: number, angle: number) => {
@@ -199,15 +206,6 @@ const DRE_PEOPLE_TERMS = [
 const DRE_PEOPLE_EXACT_TERMS = ["CMO"];
 
 const DRE_MATERIAL_TERMS = ["MATERIAIS", "MATERIAL", "DESCARTAVEIS", "EMBALAGENS", "ACESSORIOS"];
-const DRE_OCCUPANCY_TERMS = [
-  "TAXA DE LOCACAO",
-  "LOCACAO",
-  "ALUGUEL",
-  "OCUPACAO",
-  "CONCESSIONARIA",
-  "CONCESSIONARIAS",
-  "CONDOMINIO"
-];
 
 const formatCompactCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", {
@@ -303,7 +301,7 @@ const getDreOperationalResultValue = (data: DreImportData) =>
   });
 
 const getDreFinalBalanceValue = (data: DreImportData) =>
-  findDreAnySummaryValueByMatcher(data, (label) => normalizeDreLabel(label).includes("SALDO FINAL")) ??
+  findDreAnySummaryValueByMatcher(data, (label) => normalizeDreLabel(label).includes("SALDO FINAL") && !normalizeDreLabel(label).includes("PERCENTUAL")) ??
   getDreOperationalResultValue(data);
 
 const findDreGroupsByIncludes = (data: DreImportData, terms: string[]) =>
@@ -321,9 +319,10 @@ const findDreGroupsByExact = (data: DreImportData, terms: string[]) =>
   );
 
 const getDreInputsValue = (data: DreImportData) => {
-  const inputsSection = findDreSectionByIncludes(data, DRE_INPUT_TERMS);
-  if (inputsSection) {
-    return inputsSection.groups.reduce((sum, group) => sum + getDreGroupInputValue(group), 0);
+  if (data.analysis) return data.analysis.cmv;
+  const inputsSections = data.sections.filter(section => matchesAnyDreTerm(section.label, DRE_INPUT_TERMS));
+  if (inputsSections.length > 0) {
+    return inputsSections.reduce((total, section) => total + section.groups.reduce((sum, group) => sum + getDreGroupInputValue(group), 0), 0);
   }
 
   return findDreGroupsByIncludes(data, DRE_INPUT_TERMS).reduce((sum, item) => sum + getDreGroupInputValue(item.group), 0);
@@ -345,6 +344,7 @@ const getDrePeopleValue = (data: DreImportData) => {
 };
 
 const getDreOperationalExpenseValue = (data: DreImportData) => {
+  if (data.analysis?.closingStatus === "calculated") return data.analysis.operationalExpenses;
   const operationalSection = findDreSectionByIncludes(data, DRE_OPERATIONAL_EXPENSE_TERMS);
   return operationalSection ? getDreSectionValue(operationalSection) : 0;
 };
@@ -358,7 +358,6 @@ const getDreGroupsValueByTerms = (data: DreImportData, terms: string[]) => {
 
 const getDreMaterialValue = (data: DreImportData) => getDreGroupsValueByTerms(data, DRE_MATERIAL_TERMS);
 
-const getDreOccupancyValue = (data: DreImportData) => getDreGroupsValueByTerms(data, DRE_OCCUPANCY_TERMS);
 
 const getDreComparisonMetrics = (data: DreImportData) => {
   const revenue = getDreRevenueValue(data);
@@ -424,7 +423,7 @@ export const getDreRevenueValue = (data: DreImportData) => {
 };
 
 const getDreExpenseValue = (data: DreImportData) =>
-  findDreSummaryValueByMatcher(data, (label) => {
+  (data.analysis?.closingStatus === "calculated" ? data.analysis.totalExpenses : undefined) ?? findDreAnySummaryValueByMatcher(data, (label) => {
     const normalized = normalizeDreLabel(label);
     return (
       normalized.includes("TOTAL") &&
@@ -677,6 +676,7 @@ const buildConsolidatedDreData = (periods: DrePeriodData[]): DreImportData | und
     restaurantName: periods[0].data.restaurantName,
     reportTitle: periods[0].data.reportTitle,
     analysisTitle: "Análise total",
+    analysis: combineDreAnalysis(periods),
     period: {
       rawLabel: "Total"
     },
@@ -737,12 +737,12 @@ const getDreMarginTone = (value: number) => {
 };
 
 function DreResultMap({ data, copy }: { data: DreImportData; copy: DrePanelCopy }) {
-  const revenue = getDreRevenueValue(data);
+  const revenue = data.analysis?.closingStatus === "calculated" ? data.analysis.totalRevenue : getDreRevenueValue(data);
   const expenses = getDreExpenseValue(data);
   const finalBalance = getDreFinalBalanceValue(data) ?? revenue - expenses;
   const maxValue = Math.max(Math.abs(revenue), Math.abs(expenses), Math.abs(finalBalance), 1);
   const cards = [
-    { key: "revenue", label: copy.dreRevenue, value: revenue, tone: "good" },
+    { key: "revenue", label: data.analysis?.closingStatus === "calculated" ? "Receitas totais" : copy.dreRevenue, value: revenue, tone: "good" },
     { key: "outflows", label: copy.dreOutflows, value: expenses, tone: "bad" },
     { key: "balance", label: copy.dreFinalBalance, value: finalBalance, tone: finalBalance >= 0 ? "good" : "bad" }
   ];
@@ -1101,6 +1101,7 @@ function DreValidationPanel({ data }: { data: DreImportData }) {
   const finalBalance = getDreFinalBalanceValue(data);
   const operationalResult = getDreOperationalResultValue(data);
   const inputsRatio = revenue > 0 ? (inputsValue / revenue) * 100 : 0;
+  const inputsIdentified = data.sections.some(section => isDreCostSection(section.label)) || inputsValue !== 0;
   const peopleRatio = revenue > 0 ? (peopleValue / revenue) * 100 : 0;
   const expenseRatio = revenue > 0 ? (expenses / revenue) * 100 : 0;
   const checks = [
@@ -1112,9 +1113,9 @@ function DreValidationPanel({ data }: { data: DreImportData }) {
     },
     {
       label: "Insumos / CMV",
-      value: inputsValue > 0 ? formatCurrency(inputsValue) : "Não identificado",
-      status: inputsValue <= 0 ? "bad" : inputsRatio > 45 ? "mid" : "good",
-      detail: inputsValue > 0 ? `${formatPercent(inputsRatio)} sobre receita` : "Revise se o DRE usa outro nome para CMV/insumos."
+      value: inputsIdentified ? formatCurrency(inputsValue) : "Não identificado",
+      status: !inputsIdentified ? "bad" : inputsRatio > 45 ? "mid" : "good",
+      detail: inputsIdentified ? `${formatPercent(inputsRatio)} sobre receita` : "Revise se o DRE usa outro nome para CMV/insumos."
     },
     {
       label: "Pessoal / CMO",
@@ -1143,7 +1144,7 @@ function DreValidationPanel({ data }: { data: DreImportData }) {
   ];
   const alerts = [
     revenue <= 0 ? "Receita operacional/base não identificada; percentuais podem ficar inválidos." : undefined,
-    inputsValue <= 0 ? "Insumos/CMV não identificados no DRE." : undefined,
+    !inputsIdentified ? "Insumos/CMV não identificados no DRE." : undefined,
     peopleValue <= 0 ? "Pessoal/CMO não identificado no DRE." : undefined,
     inputsRatio > 45 ? `Insumos altos: ${formatPercent(inputsRatio)} sobre receita.` : undefined,
     peopleRatio > 35 ? `Pessoal alto: ${formatPercent(peopleRatio)} sobre receita.` : undefined,
@@ -2565,7 +2566,7 @@ function DreComparisonEvolutionChart({ rows }: { rows: DreComparisonRow[] }) {
                       cx={pointX}
                       cy={pointY}
                       r="5.5"
-                      fill="#292c42"
+                      fill="var(--surface)"
                       stroke={item.color}
                       className="dre-evolution-point"
                       role="button"
@@ -2913,9 +2914,26 @@ export function DreAnalysisPanel({
   copy,
   onImport,
   onSelectPeriod,
-  onRemovePeriod
+  onRemovePeriod,
+  onSaveInventory,
+  onInventoryDirtyChange
 }: DreAnalysisPanelProps) {
-  const sortedPeriods = useMemo(() => [...periods].sort((left, right) => left.key.localeCompare(right.key)), [periods]);
+  const sortedPeriods = useMemo(() => prepareDrePeriods(periods, { revenue: getDreRevenueValue, inputs: getDreInputsValue }).sort((left, right) => left.key.localeCompare(right.key)), [periods]);
+  const [inventoryDirty, setInventoryDirty] = useState(false);
+  useEffect(() => {
+    onInventoryDirtyChange?.(inventoryDirty);
+  }, [inventoryDirty, onInventoryDirtyChange]);
+  useEffect(() => () => onInventoryDirtyChange?.(false), [onInventoryDirtyChange]);
+  const changePeriod = async (keys: string[]) => {
+    if (inventoryDirty && !(await confirmAction({ title: "Descartar alterações de estoque?", message: "A configuração editada ainda não foi salva.", confirmLabel: "Descartar e mudar período", cancelLabel: "Continuar editando" }))) return;
+    setInventoryDirty(false);
+    onSelectPeriod(keys.join(DRE_SELECTION_SEPARATOR));
+  };
+  const changeComparisonMode = async (enabled: boolean) => {
+    if (inventoryDirty && !(await confirmAction({ title: "Descartar alterações de estoque?", message: "A configuração editada ainda não foi salva.", confirmLabel: "Descartar e mudar visualização", cancelLabel: "Continuar editando" }))) return;
+    setInventoryDirty(false);
+    setComparisonEnabled(enabled);
+  };
   const selectedPeriodKeys = useMemo(
     () =>
       selectedPeriod
@@ -3026,7 +3044,7 @@ export function DreAnalysisPanel({
 
     return selectedComparisonRestaurantIds.flatMap((restaurantId) => {
       const restaurant = comparisonRestaurants.find((item) => item.restaurantId === restaurantId);
-      const restaurantPeriods = restaurantId === activeRestaurantId ? periods : comparisonPeriodMap[restaurantId] ?? [];
+      const restaurantPeriods = restaurantId === activeRestaurantId ? sortedPeriods : prepareDrePeriods(comparisonPeriodMap[restaurantId] ?? [], { revenue: getDreRevenueValue, inputs: getDreInputsValue });
       const selectedRestaurantPeriods = getSelectedRestaurantPeriods(restaurantPeriods, effectiveSelectedKeys);
       const restaurantData =
         selectedRestaurantPeriods.length > 1
@@ -3053,7 +3071,7 @@ export function DreAnalysisPanel({
     comparisonRestaurants,
     comparisonEnabled,
     effectiveSelectedKeys,
-    periods,
+    sortedPeriods,
     selectedComparisonRestaurantIds
   ]);
   const comparisonMode = comparisonEnabled && selectedComparisonRestaurantIds.length > 1 && comparisonRows.length > 1;
@@ -3116,7 +3134,7 @@ export function DreAnalysisPanel({
                 periods={sortedPeriods.map((period) => ({ key: period.key, label: period.label, year: getDrePeriodYear(period) }))}
                 selectedKeys={effectiveSelectedKeys}
                 multiple
-                onSelect={(keys) => onSelectPeriod(keys.join(DRE_SELECTION_SEPARATOR))}
+                onSelect={(keys) => void changePeriod(keys)}
                 onRemove={canManageData ? onRemovePeriod : undefined}
               />
 
@@ -3126,7 +3144,7 @@ export function DreAnalysisPanel({
                 activeRestaurantId={activeRestaurantId}
                 loading={comparisonPending}
                 enabled={comparisonEnabled}
-                onModeChange={setComparisonEnabled}
+                onModeChange={enabled => void changeComparisonMode(enabled)}
                 onToggle={toggleComparisonRestaurant}
               />
             </section>
@@ -3134,7 +3152,10 @@ export function DreAnalysisPanel({
 
           {missingRestaurants.length > 0 ? <p className="message" role="status">Sem dados no período selecionado: {missingRestaurants.map((restaurant) => restaurant.restaurantName).join(", ")}.</p> : null}
           {comparisonPending ? <DreProcessingSkeleton /> : comparisonMode ? (
-            <DreComparisonPanel rows={comparisonRows} preferenceKey={preferenceKey} />
+            <>
+              <div className="dre-comparison-bases" aria-label="Base dos restaurantes comparados">{comparisonRows.map(row => <span key={row.restaurantId}><strong>{row.restaurantName}</strong> · {row.data.analysis?.inventoryStatus === "applied" ? "Estoque ajustado" : row.data.analysis?.inventoryStatus === "mixed" ? "Base mista entre meses" : row.data.analysis?.inventoryStatus === "pending" ? "Estoque pendente · sem ajuste adicional" : row.data.analysis?.sourceStockAdjustment ? "Ajuste já presente no arquivo" : "Sem ajuste de estoque"}{row.data.analysis?.closingStatus === "unavailable" ? " · fechamento do arquivo" : " · fechamento recalculado"}</span>)}</div>
+              <DreComparisonPanel rows={comparisonRows} preferenceKey={preferenceKey} />
+            </>
           ) : comparisonRequested ? (
             <section className="empty-state-card" role="status">
               <div className="empty-state-inner">
@@ -3149,6 +3170,11 @@ export function DreAnalysisPanel({
             </section>
           ) : (
             <>
+              {selectedPeriods.length === 1 && periods.find(period => period.key === selectedPeriods[0].key) ? <DreInventoryPanel
+                key={`${activeRestaurantId}.${selectedPeriods[0].key}.${periods.find(period => period.key === selectedPeriods[0].key)?.inventory?.updatedAt ?? "new"}`}
+                period={periods.find(period => period.key === selectedPeriods[0].key)!} periods={periods} editable={canManageData && Boolean(onSaveInventory)} onSave={onSaveInventory} onDirtyChange={setInventoryDirty}
+              /> : selectedPeriods.length > 1 ? <p className="dre-stock-help">Consolidado dos ajustes salvos em cada mês. Selecione apenas um mês para informar ou editar os estoques.</p> : null}
+              <DreClosingReconciliation data={displayData} />
               <DreValidationPanel data={displayData} />
 
               <div className="dre-visual-grid">

@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useRef } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { confirmAction } from "../utils/confirmDialog";
 import { BrandMark, DashboardShellHeader, InternalNavigation, UserAvatar } from "./appChrome";
 import { HelpPage } from "./helpPage";
 import { RestaurantNavigatorPanel } from "./dashboardPanels";
@@ -155,6 +156,12 @@ export function DashboardShell({
   const shellRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLElement>(null);
   const contextRef = useRef<HTMLElement>(null);
+  const [inventoryDirty, setInventoryDirty] = useState(false);
+  const navigate = async (action: () => void) => {
+    if (inventoryDirty && !(await confirmAction({ title: "Descartar alterações de estoque?", message: "A configuração da DRE ainda não foi salva.", confirmLabel: "Descartar e continuar", cancelLabel: "Continuar editando" }))) return;
+    setInventoryDirty(false);
+    action();
+  };
   useEffect(() => {
     const updateHeights = () => {
       shellRef.current?.style.setProperty("--workspace-navigation-height", `${navigationRef.current?.getBoundingClientRect().height ?? 0}px`);
@@ -178,13 +185,13 @@ export function DashboardShell({
         <div className="dashboard-sidebar-brand">
           <BrandMark tagline={brandTagline} />
         </div>
-        <InternalNavigation section={currentSection} onChange={onChangeSection} items={navigationItems} />
+        <InternalNavigation section={currentSection} onChange={section => void navigate(() => onChangeSection(section))} items={navigationItems} />
         <div className="dashboard-sidebar-footer">
           <div className="sidebar-account-menu" aria-label="Opções da conta">
             <button
               type="button"
               className="sidebar-account-menu-button"
-              onClick={onLogout}
+              onClick={() => void navigate(onLogout)}
               aria-label={logoutLabel}
               data-ui-tooltip={logoutLabel}
             >
@@ -193,7 +200,7 @@ export function DashboardShell({
             <button
               type="button"
               className={`sidebar-account-menu-button ${currentSection === "help" ? "active" : ""}`}
-              onClick={() => onChangeSection("help")}
+              onClick={() => void navigate(() => onChangeSection("help"))}
               aria-label="Ajuda"
               data-ui-tooltip="Ajuda"
             >
@@ -212,10 +219,10 @@ export function DashboardShell({
               description={restaurantNavigatorCopy.description}
               memberships={effectiveSession.memberships ?? []}
               activeRestaurantId={effectiveSession.activeRestaurantId ?? effectiveSession.restaurantId}
-              onActivateRestaurant={onActivateRestaurant}
+              onActivateRestaurant={restaurantId => void navigate(() => onActivateRestaurant(restaurantId))}
             />
           ) : <div className="workspace-context-empty"><small>Restaurante ativo</small><strong>{effectiveSession.activeRestaurantName ?? effectiveSession.restaurantName ?? "Nenhum restaurante vinculado"}</strong></div>}
-          <button type="button" className="workspace-context-user" onClick={onOpenAccount} aria-label={`${myAccountLabel}: ${userName}`} title={effectiveSession.email}>
+          <button type="button" className="workspace-context-user" onClick={() => void navigate(onOpenAccount)} aria-label={`${myAccountLabel}: ${userName}`} title={effectiveSession.email}>
             <span aria-hidden="true"><UserAvatar session={effectiveSession} size="sm" /></span>
             <span className="workspace-context-user-copy"><small>Usuário logado</small><strong>{userName}</strong></span>
           </button>
@@ -246,6 +253,8 @@ export function DashboardShell({
                 canManageData={canManageOperationalData}
                 copy={drePanelCopy}
                 onImport={dreAnalysisProps.onImport}
+                onSaveInventory={dreAnalysisProps.onSaveInventory}
+                onInventoryDirtyChange={setInventoryDirty}
                 onSelectPeriod={dreAnalysisProps.onSelectPeriod}
                 onRemovePeriod={dreAnalysisProps.onRemovePeriod}
               />

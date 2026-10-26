@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { normalizeDreInventory } from "../utils/dreInventory";
 import type { Dispatch, SetStateAction } from "react";
 import type {
   AuthSession,
@@ -255,6 +256,7 @@ const normalizeDrePeriods = (value: unknown): DrePeriodData[] =>
       key: period.key,
       label: typeof period.label === "string" ? period.label : period.key,
       fileName: typeof period.fileName === "string" ? period.fileName : undefined,
+      inventory: normalizeDreInventory(period.inventory),
       data
     });
 

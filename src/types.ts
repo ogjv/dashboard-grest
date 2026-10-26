@@ -77,6 +77,47 @@ export type DreImportData = {
   };
   sections: DreSection[];
   summary: DreSummaryLine[];
+  analysis?: DreCalculatedAnalysis;
+};
+
+export type DreInventoryGroup = {
+  openingMode: "manual" | "previous";
+  opening?: number;
+  closing?: number;
+  groupId?: string;
+};
+export type DreInventoryConfig = {
+  enabled: boolean;
+  bar: DreInventoryGroup;
+  kitchen: DreInventoryGroup;
+  additionalGroups?: Array<DreInventoryGroup & { id: string; label: string }>;
+  updatedAt?: string;
+  updatedBy?: string;
+};
+export type DreCalculatedAnalysis = {
+  inventoryStatus: "off" | "pending" | "applied" | "mixed";
+  inventoryIssues: string[];
+  stockAdjustment: number;
+  sourceStockAdjustment: boolean;
+  purchases: number;
+  cmv: number;
+  grossRevenue: number;
+  deductions: number;
+  netRevenue: number;
+  otherRevenue: number;
+  operationalExpenses: number;
+  nonOperationalExpenses: number;
+  otherExpenses: number;
+  contribution: number;
+  operationalResult: number;
+  totalExpenses: number;
+  totalRevenue: number;
+  finalBalance: number;
+  originalFinalBalance?: number;
+  originalOperationalResult?: number;
+  originalExpenses?: number;
+  closingStatus: "calculated" | "unavailable";
+  closingIssues: string[];
 };
 
 export type DrePeriodData = {
@@ -84,6 +125,7 @@ export type DrePeriodData = {
   label: string;
   fileName?: string;
   data: DreImportData;
+  inventory?: DreInventoryConfig;
 };
 
 export type GoodsEntryRow = {
@@ -292,7 +334,7 @@ export type AuditLogEntry = {
   id: string;
   createdAt: string;
   module: "dashboard" | "dre" | "goods-entry";
-  action: "import" | "remove";
+  action: "import" | "remove" | "update";
   status: "success" | "cancelled" | "error";
   title: string;
   actorEmail?: string;

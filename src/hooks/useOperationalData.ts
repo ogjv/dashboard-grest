@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   AuditLogEntry,
   DrePeriodData,
+  DreInventoryConfig,
   GoodsEntryImportData,
   GoodsEntryRow,
   ImportValidation,
@@ -14,6 +15,7 @@ import type {
 import { buildDashboardData, buildDashboardSlice, mapRecipeRows, mapSalesRows } from "../utils/cmv";
 import { DRE_TOTAL_PERIOD, getDrePeriodKey, getDrePeriodLabel, getDreRevenueGroups, getDreRevenueValue } from "../components/drePanels";
 import { confirmAction } from "../utils/confirmDialog";
+import { getInventoryReport, normalizeDreInventory, previousInventoryPeriod } from "../utils/dreInventory";
 import { parseDreSpreadsheetFile, parseGoodsEntrySpreadsheetFile, parseSalesSpreadsheetFile, parseSpreadsheetFile } from "../utils/file";
 
 export type UploadState = PersistedWorkspace["state"];
@@ -861,6 +863,7 @@ export function useOperationalData() {
           key: periodKey,
           label: periodLabel,
           fileName: file.name,
+          inventory: current.find(period => period.key === periodKey)?.inventory,
           data: nextDreData
         };
         const withoutCurrentPeriod = current.filter((period) => period.key !== periodKey);
@@ -886,6 +889,21 @@ export function useOperationalData() {
     } finally {
       setDreProcessing(false);
     }
+  };
+
+  const handleDreInventorySave = async (periodKey: string, inventory: DreInventoryConfig, actorEmail?: string) => {
+    const period = drePeriods.find(item => item.key === periodKey);
+    if (!period) throw new Error("O período não está mais disponível. Reabra a DRE antes de salvar.");
+    const normalized = normalizeDreInventory(inventory);
+    if (!normalized) throw new Error("Configuração de estoque inválida.");
+    const report = getInventoryReport(period, drePeriods, normalized);
+    if (normalized.enabled && report.issues.length > 0) throw new Error(report.issues.join(" "));
+    const followers = drePeriods.filter(item => previousInventoryPeriod(item, drePeriods)?.key === periodKey && ((item.inventory?.bar.openingMode === "previous") || (item.inventory?.kitchen.openingMode === "previous") || item.inventory?.additionalGroups?.some(group => group.openingMode === "previous") || (!item.inventory && normalized.enabled)));
+    if (followers.length > 0 && !(await confirmAction({ title: "Atualizar estoque e meses vinculados?", message: `O estoque final de ${period.label} será usado como estoque inicial de ${followers.map(item => item.label).join(", ")}. Os indicadores desses meses serão recalculados automaticamente.`, confirmLabel: "Salvar e recalcular", cancelLabel: "Cancelar" }))) return false;
+    const saved = { ...normalized, updatedAt: new Date().toISOString(), updatedBy: actorEmail };
+    setDrePeriods(current => current.map(item => item.key === periodKey ? { ...item, inventory: saved } : item));
+    setState(current => appendAuditEntries(current, [createAuditEntry({ module: "dre", action: "update", status: "success", title: normalized.enabled ? "Ajuste de estoque da DRE" : "Variação de estoque desativada", actorEmail, periodLabel: period.label, detail: normalized.enabled ? `Variação total: ${report.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}. Compras originais preservadas. Meses vinculados: ${followers.map(item => item.label).join(", ") || "nenhum"}.` : "Análise sem ajuste de estoque. Os valores de inventário foram preservados." })]));
+    return true;
   };
 
   const handleGoodsEntryImport = async (files: File | File[], actorEmail?: string) => {
@@ -1188,6 +1206,7 @@ export function useOperationalData() {
     handleUpload,
     handlePairedUpload,
     handleDreImport,
+    handleDreInventorySave,
     handleGoodsEntryImport,
     handleClearGoodsEntry,
     handleRemoveGoodsEntryImportedPeriod,

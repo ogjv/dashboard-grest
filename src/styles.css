@@ -4584,17 +4584,17 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 
 .dre-future-chart-card {
   position: relative;
-  background: #292c42;
-  border-color: rgba(90, 76, 255, 0.72);
-  color: #ffffff;
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--text);
 }
 
 .dre-future-chart-card .section-head h3 {
-  color: #ffffff;
+  color: var(--text);
 }
 
 .dre-future-chart-card .section-head p {
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--muted);
 }
 
 .dre-zero-bar-shell,
@@ -4643,7 +4643,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 
 .dre-zero-zone-glow {
   fill: transparent;
-  stroke: rgba(255, 255, 255, 0.16);
+  stroke: var(--line);
 }
 
 .dre-zero-benchmark-band.good {
@@ -4659,24 +4659,24 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-zero-average-line {
-  stroke: rgba(255, 255, 255, 0.2);
+  stroke: var(--muted);
   stroke-width: 1.2;
   stroke-dasharray: 5 8;
 }
 
 .dre-zero-axis {
-  stroke: rgba(255, 255, 255, 0.44);
+  stroke: var(--muted);
   stroke-width: 1.4;
 }
 
 .dre-zero-grid-line {
-  stroke: rgba(255, 255, 255, 0.14);
+  stroke: var(--line);
   stroke-width: 1;
   stroke-dasharray: 4 10;
 }
 
 .dre-zero-y-axis {
-  stroke: rgba(255, 255, 255, 0.28);
+  stroke: var(--muted);
   stroke-width: 1.2;
 }
 
@@ -4693,7 +4693,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 .dre-future-chart-card .dre-zero-axis-label,
 .dre-future-chart-card .dre-zero-restaurant-label,
 .dre-future-chart-card .dre-zero-scale-label {
-  fill: rgba(255, 255, 255, 0.68);
+  fill: var(--muted);
 }
 
 .dre-zero-scale-label {
@@ -4714,7 +4714,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
   width: 100%;
   max-height: 2.45em;
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--muted);
   font-size: 0.72rem;
   font-weight: 900;
   line-height: 1.16;
@@ -4727,7 +4727,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-zero-bar-guide {
-  stroke: rgba(255, 255, 255, 0.08);
+  stroke: var(--line);
   stroke-width: 1;
 }
 
@@ -4767,9 +4767,9 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-bar-external-value {
-  fill: rgba(255, 255, 255, 0.86);
+  fill: var(--text);
   paint-order: stroke;
-  stroke: #292c42;
+  stroke: var(--surface);
   stroke-width: 5px;
   font-size: 0.76rem;
   font-weight: 900;
@@ -4778,7 +4778,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-bar-external-value.zero {
-  fill: rgba(255, 255, 255, 0.68);
+  fill: var(--muted);
   font-size: 0.74rem;
 }
 
@@ -4803,13 +4803,13 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-point-label-box {
-  fill: rgba(24, 24, 28, 0.94);
-  stroke: rgba(255, 255, 255, 0.12);
-  filter: drop-shadow(0 8px 14px rgba(20, 20, 23, 0.2));
+  fill: var(--surface);
+  stroke: var(--line);
+  filter: none;
 }
 
 .dre-point-label-text {
-  fill: rgba(255, 255, 255, 0.96);
+  fill: var(--text);
   font-size: 0.72rem;
   font-weight: 950;
 }
@@ -4828,7 +4828,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-future-chart-card .dre-chart-centered-legend {
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--muted);
 }
 
 .dre-chart-centered-legend span {
@@ -4862,7 +4862,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 
 .dre-chart-interaction-hint {
   margin: 6px 0 0;
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--muted);
   font-size: 0.78rem;
   font-weight: 750;
 }
@@ -4872,14 +4872,14 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
   align-items: center;
   gap: 7px;
   padding: 6px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  color: rgba(255, 255, 255, 0.74);
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  background: var(--surface-subtle);
 }
 
 .dre-benchmark-zone-legend strong {
-  color: rgba(255, 255, 255, 0.94);
+  color: var(--text);
   font-size: 0.72rem;
   font-weight: 950;
   text-transform: uppercase;
@@ -5143,17 +5143,17 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-line-reference-card {
-  background: #292c42;
-  border-color: rgba(90, 76, 255, 0.72);
-  color: #ffffff;
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--text);
 }
 
 .dre-line-reference-card .section-head h3 {
-  color: #ffffff;
+  color: var(--text);
 }
 
 .dre-line-reference-card .section-head p {
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--muted);
 }
 
 .dre-comparison-evolution-chart {
@@ -5175,8 +5175,8 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-line-reference-card .dre-evolution-zone-base {
-  fill: rgba(255, 255, 255, 0.025);
-  stroke: rgba(255, 255, 255, 0.08);
+  fill: var(--surface-subtle);
+  stroke: var(--line);
 }
 
 .dre-line-reference-card .dre-evolution-zone.good {
@@ -5192,13 +5192,13 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-line-reference-card .dre-evolution-marker-line {
-  stroke: rgba(255, 255, 255, 0.28);
+  stroke: var(--line);
   stroke-width: 1.1;
   stroke-dasharray: 6 8;
 }
 
 .dre-line-reference-card .dre-evolution-marker-line.strong {
-  stroke: rgba(255, 255, 255, 0.36);
+  stroke: var(--muted);
   stroke-width: 1.3;
 }
 
@@ -5207,17 +5207,17 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-line-reference-card .dre-comparison-evolution-chart > line:first-of-type {
-  stroke: rgba(255, 255, 255, 0.28);
+  stroke: var(--muted);
   stroke-width: 1.2;
 }
 
 .dre-line-y-axis {
-  stroke: rgba(255, 255, 255, 0.28);
+  stroke: var(--muted);
   stroke-width: 1.2;
 }
 
 .dre-line-measure-label {
-  fill: rgba(255, 255, 255, 0.86);
+  fill: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -5225,7 +5225,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 
 .dre-line-reference-card .dre-evolution-boundary-axis,
 .dre-line-reference-card .dre-line-axis-label {
-  fill: rgba(255, 255, 255, 0.72);
+  fill: var(--muted);
   font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -5256,7 +5256,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-line-reference-card .dre-chart-centered-legend {
-  color: rgba(255, 255, 255, 0.76);
+  color: var(--muted);
   font-size: 0.95rem;
 }
 
@@ -5267,17 +5267,17 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-grouped-reference-card {
-  background: #292c42;
-  border-color: rgba(90, 76, 255, 0.72);
-  color: #ffffff;
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--text);
 }
 
 .dre-grouped-reference-card .section-head h3 {
-  color: #ffffff;
+  color: var(--text);
 }
 
 .dre-grouped-reference-card .section-head p {
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--muted);
 }
 
 .dre-grouped-chart-shell {
@@ -5313,11 +5313,11 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 .dre-grouped-reference-card .dre-line-axis-label,
 .dre-grouped-reference-card .dre-line-measure-label,
 .dre-grouped-metric-label {
-  fill: rgba(255, 255, 255, 0.72);
+  fill: var(--muted);
 }
 
 .dre-grouped-reference-card .dre-grouped-measure-label {
-  fill: rgba(255, 255, 255, 0.58);
+  fill: var(--muted);
   font-size: 0.7rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -5345,18 +5345,18 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-grouped-reference-card .dre-zero-grid-line {
-  stroke: rgba(255, 255, 255, 0.12);
+  stroke: var(--line);
 }
 
 .dre-grouped-reference-card .dre-zero-axis {
-  stroke: rgba(255, 255, 255, 0.42);
+  stroke: var(--muted);
 }
 
 .dre-grouped-active-insight {
   margin-top: 10px;
   min-height: 46px;
   background: linear-gradient(135deg, color-mix(in srgb, var(--dre-color) 16%, transparent), rgba(255, 255, 255, 0.055));
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
 }
 
 .dre-grouped-active-insight.empty {
@@ -5366,22 +5366,22 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 .dre-grouped-active-insight.empty span {
-  color: rgba(255, 255, 255, 0.54);
+  color: var(--muted);
   font-weight: 800;
 }
 
 .dre-grouped-active-insight span,
 .dre-grouped-active-insight strong {
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--text);
 }
 
 .dre-grouped-active-insight small {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.72);
+  background: var(--surface-subtle);
+  color: var(--muted);
 }
 
 .dre-grouped-reference-card .dre-chart-centered-legend {
-  color: rgba(255, 255, 255, 0.76);
+  color: var(--muted);
   font-size: 0.95rem;
 }
 
@@ -5633,8 +5633,8 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 :root[data-theme="dark"] .dre-future-chart-card {
-  border-color: rgba(90, 76, 255, 0.72);
-  background: #292c42;
+  border-color: var(--line);
+  background: var(--surface);
 }
 
 :root[data-theme="dark"] .dre-comparison-metric-selector button {
@@ -5741,7 +5741,7 @@ svg [role="button"]:focus-visible { outline: 2px solid var(--brand); outline-off
 }
 
 :root[data-theme="dark"] .dre-benchmark-zone-legend strong {
-  color: rgba(244, 240, 231, 0.94);
+  color: var(--text);
 }
 
 :root[data-theme="dark"] .dre-zero-band-label rect {
@@ -10919,4 +10919,77 @@ th {
 .dre-participation-panel .dre-donut-swatch { margin-top: 4px; }
 @container dre-donut (min-width: 560px) {
   .dre-participation-panel .dre-donut-card .dre-donut-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+}
+
+.dre-stock-panel, .dre-reconciliation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+  margin: 14px 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.dre-stock-header { display: flex; align-items: start; justify-content: space-between; gap: 16px; min-width: 0; }
+.dre-stock-header > div { min-width: 0; }
+.dre-stock-header h3 { margin: 0 0 6px; font-size: 1rem; }
+.dre-stock-header p, .dre-stock-help { margin: 0; color: var(--muted); line-height: 1.5; font-size: 0.83rem; }
+.dre-stock-switch { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 6px 0; font-size: 0.85rem; cursor: pointer; }
+.dre-stock-switch input { flex: 0 0 18px; width: 18px; height: 18px; accent-color: var(--brand); }
+.dre-stock-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-width: 0; }
+.dre-stock-group { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.dre-stock-group legend { padding: 0 6px; font-weight: 650; font-size: 0.9rem; }
+.dre-stock-group legend { max-width: 100%; overflow-wrap: anywhere; }
+.dre-stock-remove, .dre-stock-add { min-height: 42px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-subtle); color: var(--text); font-size: 0.83rem; white-space: normal; }
+.dre-stock-remove { justify-self: start; }
+.dre-stock-add:disabled { opacity: 0.55; cursor: not-allowed; }
+.dre-stock-group label { display: grid; gap: 6px; min-width: 0; }
+.dre-stock-group label > span, .dre-stock-group > small { color: var(--muted); font-size: 0.77rem; line-height: 1.5; }
+:root:is([data-theme], :not([data-theme])) .dre-stock-group :is(input, select) {
+  width: 100%; min-width: 0; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); background: var(--surface-subtle); font: inherit; font-size: 0.85rem; box-shadow: none; color-scheme: inherit;
+}
+.dre-stock-group :is(input, select):focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.dre-stock-group input[readonly] { color: var(--muted); cursor: default; }
+.dre-stock-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dre-stock-preview, .dre-calculation-rows { display: grid; gap: 0; margin: 0; min-width: 0; }
+.dre-stock-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.dre-stock-overview > div { display: grid; gap: 7px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.dre-stock-overview dt { color: var(--muted); font-size: 0.77rem; line-height: 1.4; }
+.dre-stock-overview dd { margin: 0; font-size: 1rem; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dre-stock-preview > div, .dre-calculation-rows > div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 0.81rem; line-height: 1.4; }
+.dre-stock-preview dt, .dre-calculation-rows dt { min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
+.dre-stock-preview dd, .dre-calculation-rows dd { margin: 0; flex-shrink: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dre-stock-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.dre-stock-actions .primary-button { min-height: 42px; border-radius: 8px; padding: 8px 14px; font-size: 0.85rem; }
+.dre-stock-actions > span { color: var(--muted); font-size: 0.8rem; }
+.dre-stock-panel .message { margin: 0; font-size: 0.84rem; line-height: 1.5; }
+.dre-reconciliation summary { font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.dre-reconciliation details { min-width: 0; max-width: 100%; }
+.dre-reconciliation details[open] { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.dre-reconciliation details[open] > :not(summary) { margin-top: 14px; }
+.dre-reconciliation .table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+.dre-reconciliation table { min-width: 460px; width: 100%; font-size: 0.82rem; }
+.dre-basis-status { flex-shrink: 0; max-width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; font-size: 0.76rem; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.dre-basis-status.applied { color: var(--tone-good); border-color: var(--tone-good-border); }
+.dre-basis-status.pending { color: var(--tone-mid); border-color: var(--tone-mid-border); }
+.dre-stock-pending { padding: 12px; border: 1px solid var(--tone-mid-border); border-radius: 8px; font-size: 0.82rem; line-height: 1.5; }
+.dre-stock-pending p { margin: 0; }
+.dre-stock-pending ul { margin: 8px 0 0; padding-left: 18px; }
+.dre-comparison-bases { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
+.dre-comparison-bases > span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 0.76rem; line-height: 1.5; }
+.dre-comparison-bases strong { color: var(--text); }
+@media (max-width: 780px) {
+  .dre-stock-header { flex-direction: column; gap: 10px; }
+  .dre-stock-switch { flex-shrink: 1; }
+  .dre-stock-groups { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) {
+  .dre-stock-panel, .dre-reconciliation { padding: 12px; }
+  .dre-stock-group { padding: 10px; }
+  .dre-stock-values { grid-template-columns: minmax(0, 1fr); }
+  .dre-stock-overview { grid-template-columns: minmax(0, 1fr); }
+  .dre-stock-overview > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 }

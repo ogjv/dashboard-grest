@@ -44,6 +44,7 @@ export default function App() {
     hasDashboardData,
     handlePairedUpload,
     handleDreImport,
+    handleDreInventorySave,
     handleGoodsEntryImport,
     handleClearGoodsEntry,
     handleRemoveGoodsEntryImportedPeriod,
@@ -219,6 +220,7 @@ export default function App() {
           error: dreError,
           processing: dreProcessing,
           onImport: (file) => void handleDreImport(file, effectiveSession.email),
+          onSaveInventory: canManageOperationalData ? (period, inventory) => handleDreInventorySave(period, inventory, effectiveSession.email) : undefined,
           onSelectPeriod: setSelectedDrePeriod,
           onRemovePeriod: canManageOperationalData ? (period) => handleRemoveDrePeriod(period, effectiveSession.email) : undefined
         }}

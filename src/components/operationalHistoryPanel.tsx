@@ -13,6 +13,7 @@ const moduleLabel = {
 } satisfies Record<AuditLogEntry["module"], string>;
 
 const actionLabel = {
+  update: "Atualização",
   import: "Importação",
   remove: "Exclusão"
 } satisfies Record<AuditLogEntry["action"], string>;
@@ -92,7 +93,7 @@ export function OperationalHistoryPanel({ entries = [] }: OperationalHistoryPane
       <div className="section-head">
         <div>
           <h3>Histórico operacional</h3>
-          <p>Importações e exclusões registradas nas abas de Dashboard, DRE e Entrada de mercadorias.</p>
+          <p>Importações, ajustes e exclusões registrados nas abas de Dashboard, DRE e Entrada de mercadorias.</p>
         </div>
         <span className="cmv-pill pending">{filteredEntries.length} evento(s)</span>
       </div>
